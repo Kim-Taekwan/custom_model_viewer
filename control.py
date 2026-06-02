@@ -42,11 +42,8 @@ class Control:
             self.window.move_up = True
         elif symbol in [pyglet.window.key.Q, pyglet.window.key.PAGEDOWN]:
             self.window.move_down = True
-        elif symbol == pyglet.window.key.R: # reset camera position
-            self.window.cam_eye = Vec3(0, 2, 4)
-            self.window.cam_target = Vec3(0, 0, 0)
-            self.window.cam_vup = Vec3(0, 1, 0)
-            self.window.update_view_mat()
+        elif symbol == pyglet.window.key.R:
+            self.window.reset_camera()
         elif symbol == pyglet.window.key._1:
             self.window.render_mode = 1
         elif symbol == pyglet.window.key._2:
@@ -55,14 +52,20 @@ class Control:
             self.window.render_mode = 3
         elif symbol == pyglet.window.key._4:
             self.window.render_mode = 4
+        elif symbol == pyglet.window.key._5:
+            self.window.render_mode = 5
         elif symbol in [pyglet.window.key.LSHIFT, pyglet.window.key.RSHIFT]:
             self.window.cam_move_speed = 0.1
+        elif symbol == pyglet.window.key.P:
+            self.window.save_screenshot()
     
     def on_key_release(self, symbol, modifier):
         if symbol == pyglet.window.key.ESCAPE:
             pyglet.app.exit()
         elif symbol == pyglet.window.key.SPACE:
             self.window.animate = not self.window.animate
+        elif symbol == pyglet.window.key.ENTER:
+            self.window.spin_light = not self.window.spin_light
         elif symbol in [pyglet.window.key.A, pyglet.window.key.LEFT]:
             self.window.move_left = False
         elif symbol in [pyglet.window.key.D, pyglet.window.key.RIGHT]:

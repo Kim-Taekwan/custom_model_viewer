@@ -13,6 +13,7 @@ import random
 import shader
 from primitives import CustomGroup
 from halfedge import Mesh, Halfedge, Vertex, Edge, Face
+from shader import ShaderMode
 
 
 
@@ -22,15 +23,20 @@ class RenderWindow(pyglet.window.Window):
     '''
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.point_batch = pyglet.graphics.Batch()
-        self.edge_batch = pyglet.graphics.Batch()
-        self.face_batch = pyglet.graphics.Batch()
+        self.wireframe_batch = pyglet.graphics.Batch()
+        self.default_batch = pyglet.graphics.Batch()
+        self.phong_batch = pyglet.graphics.Batch()
+        self.gouraud_batch = pyglet.graphics.Batch()        
         '''
         View (camera) parameters
         '''
-        self.cam_eye = Vec3(0,0,25)
-        self.cam_target = Vec3(0,0,0)
-        self.cam_vup = Vec3(0,1,0)
+        self.initial_cam_eye = Vec3(0, 0, 25)
+        self.initial_cam_target = Vec3(0, 0, 0)
+        self.initial_cam_vup = Vec3(0, 1, 0)
+
+        self.cam_eye = self.initial_cam_eye
+        self.cam_target = self.initial_cam_target
+        self.cam_vup = self.initial_cam_vup
         self.view_mat = None
         '''
         Projection parameters
@@ -54,11 +60,11 @@ class RenderWindow(pyglet.window.Window):
         self.drag_move_speed = 0.02
         self.pan_speed = 0.01
         self.cam_rotate_speed = 0.01
+        self.spin_light = False
 
-        self.render_mode = 1 # 1: wireframe, 2: phong, 3: texture, 4: normal mapping
-
+        self.render_mode = 1 # 1: wireframe, 2: phong, 3: gouraud, 4: texture, 5: default
         self.meshes = []
-        self.vertex_selected = None
+        self.lights = []
 
     def setup(self) -> None:
         self.set_minimum_size(width = 400, height = 300)
@@ -66,7 +72,7 @@ class RenderWindow(pyglet.window.Window):
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_CULL_FACE)
         #glClearColor(.3, .3, .3, 1)
-        glLineWidth(2.5)
+        #glLineWidth(2.5)
 
         # 1. Create a view matrix
         self.view_mat = Mat4.look_at(
@@ -87,10 +93,11 @@ class RenderWindow(pyglet.window.Window):
         self.clear()
 
         match self.render_mode:
-            case 1: self.edge_batch.draw() # wireframe mode
-            case 2: self.face_batch.draw() # phong illumination mode
-            case 3: pass # texture mode
-            case 4: pass # normal mapping mode
+            case 1: self.wireframe_batch.draw()
+            case 2: self.phong_batch.draw()
+            case 3: self.gouraud_batch.draw()
+            case 4: pass
+            case 5: self.default_batch.draw()
             case _: pass
         
 
@@ -125,6 +132,15 @@ class RenderWindow(pyglet.window.Window):
             self.cam_eye -= (up * self.cam_move_speed)
             self.cam_target -= (up * self.cam_move_speed)
             self.update_view_mat()
+
+        if self.spin_light:
+            for i, light in enumerate(self.lights):    
+                rotate_angle = dt
+                rotate_axis = Vec3(0,1,0)
+                rotate_mat = Mat4.from_rotation(angle = rotate_angle, vector = rotate_axis)
+                result = rotate_mat @ Vec4(light["position"].x, light["position"].y, light["position"].z, 1.0)
+                light["position"] = result.xyz
+
         
         for i, shape in enumerate(self.shapes):
             '''
@@ -147,13 +163,35 @@ class RenderWindow(pyglet.window.Window):
             '''
             shape.shader_program['view_proj'] = view_proj
 
+            if shape.shader_mode in [shader.ShaderMode.PHONG, shader.ShaderMode.GOURAUD]:
+                shape.shader_program["viewPosition"] = self.cam_eye
+                shape.shader_program["numLights"] = len(self.lights)
+
+                for i, light in enumerate(self.lights):
+                    shape.shader_program[f"lights[{i}].position"] = light["position"]
+                    shape.shader_program[f"lights[{i}].color"] = light["color"]
+                    shape.shader_program[f"lights[{i}].intensity"] = light["intensity"]
+
+
     def on_resize(self, width, height):
         glViewport(0, 0, *self.get_framebuffer_size())
         self.proj_mat = Mat4.perspective_projection(
             aspect = width/height, z_near=self.z_near, z_far=self.z_far, fov = self.fov)
         return pyglet.event.EVENT_HANDLED
     
-    def load_model(self, filename, transform=None, face_color=None, point_color=[255, 255, 0, 255], edge_color=[255, 255, 255, 255]):
+    def reset_camera(self):
+        self.cam_eye = self.initial_cam_eye
+        self.cam_target = self.initial_cam_target
+        self.cam_vup = self.initial_cam_vup
+        self.update_view_mat()
+
+    def save_screenshot(self):
+        filename = input("Enter filename for screenshot: ")
+        screenshot = pyglet.image.get_buffer_manager().get_color_buffer()
+        screenshot.save(f"Screenshots/{filename}.png")
+        print(f"Screenshot Saved")
+    
+    def load_model(self, filename, transform=None, color=None, edge_color=[255, 255, 255, 255]):
         mesh = Mesh(filename.split("/")[-1].split(".")[0])
         vertice = []
         normals = []
@@ -176,7 +214,7 @@ class RenderWindow(pyglet.window.Window):
                     continue
                 x, y, z = map(float, line.split()[1:4])
                 vertice.extend([x, y, z])
-                mesh.vertices.append(Vertex(Vec3(x, y, z), len(mesh.vertices), point_color))
+                mesh.vertices.append(Vertex(Vec3(x, y, z), len(mesh.vertices), color))
                 normal_coords.append((0.0, 0.0, 0.0))
             if line.startswith("vn "):
                 if len(line.split()) != 4:
@@ -275,23 +313,32 @@ class RenderWindow(pyglet.window.Window):
         if transform is None:
             transform = Mat4.from_translation(self.cam_target)
 
-        if face_color is None:
-            face_color = [random.randint(40, 250), random.randint(40, 250), random.randint(40, 250), 255]
+        if color is None:
+            color = [random.randint(40, 250), random.randint(40, 250), random.randint(40, 250), 255]
 
-        face_colors = face_color * (len(vertice) // 3)
+        face_colors = color * (len(vertice) // 3)
         edge_colors = edge_color * (len(vertice) // 3)
 
         self.add_faces(transform, vertice, indice, face_colors, normals)
-        self.add_edges(transform, vertice, edge_indice, edge_colors, normals)
+        self.add_wireframes(transform, vertice, edge_indice, edge_colors, normals)
         
 
     def add_faces(self, transform, vertice, indice, color, normal):
         '''
         Assign a group for each shape
         '''
-        shape = CustomGroup(transform, len(self.shapes))
+        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.DEFAULT)
         shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_TRIANGLES, # type: ignore
-                        batch = self.face_batch,
+                        batch = self.default_batch,
+                        group = shape,
+                        indices = indice,
+                        vertices = ('f', vertice),
+                        colors = ('Bn', color))
+        self.shapes.append(shape)
+
+        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.GOURAUD)
+        shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_TRIANGLES, # type: ignore
+                        batch = self.gouraud_batch,
                         group = shape,
                         indices = indice,
                         vertices = ('f', vertice),
@@ -299,16 +346,33 @@ class RenderWindow(pyglet.window.Window):
                         normals = ('f', normal))
         self.shapes.append(shape)
 
-    def add_edges(self, transform, vertice, indices, color, normal):
-        shape = CustomGroup(transform, len(self.shapes))
+        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.PHONG)
+        shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_TRIANGLES, # type: ignore
+                        batch = self.phong_batch,
+                        group = shape,
+                        indices = indice,
+                        vertices = ('f', vertice),
+                        colors = ('Bn', color),
+                        normals = ('f', normal))
+        self.shapes.append(shape)
+
+    def add_wireframes(self, transform, vertice, indices, color, normal):
+        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.DEFAULT)
         shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_LINES, # type: ignore
-            batch=self.edge_batch,
+            batch=self.wireframe_batch,
             group=shape,
             indices=indices,
             vertices=('f', vertice),
             colors=('Bn', color),
             normals = ('f', normal))
         self.shapes.append(shape)
+
+    def add_point_light(self, position, color=Vec3(1.0, 1.0, 1.0), intensity=1.0):
+        self.lights.append({
+            "position": position,
+            "color": color,
+            "intensity": intensity
+        })
          
     def run(self):
         pyglet.clock.schedule_interval(self.update, 1/60)

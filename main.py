@@ -11,18 +11,18 @@ if __name__ == '__main__':
     height = 720
 
     # Render window.
-    renderer = RenderWindow(width, height, "3D Model with  and textures", resizable = True)
+    renderer = RenderWindow(width, height, "Rendering & Texturing", resizable = True)
     renderer.set_location(200, 200)
 
     # Keyboard/Mouse control. Not implemented yet.
     controller = Control(renderer)
 
-    #renderer.load_model('model/monkey.obj', transform=Mat4.from_translation(vector=Vec3(x=-4, y=1, z=0)))
-    #renderer.load_model('model/miku.obj', face_color=[134, 206, 203, 255])
-    #renderer.load_model('model/monkey.obj', transform=Mat4.from_translation(vector=Vec3(x=-4, y=1, z=0)))
-    renderer.load_model('Free_rock/Free_rock.obj', point_color=[128, 128, 128, 255])
+    #renderer.load_model('model/monkey.obj')
+    renderer.load_model('model/miku.obj', color=[134, 206, 203, 255], transform=Mat4.from_translation(Vec3(0, -14, 15)))
+    #renderer.load_model('Free_rock/Free_rock.obj', color=[128, 128, 128, 255])
 
-    #renderer.add_point_light(Vec3(0, 5, 5), Vec3(1, 1, 1))
+    renderer.add_point_light(position=Vec3(50, 50, 50), intensity=1.0)
+    renderer.add_point_light(position=Vec3(-30, 10, 50), intensity=0.3)
 
     #draw shapes
     renderer.run()
