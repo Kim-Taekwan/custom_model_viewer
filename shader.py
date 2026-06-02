@@ -5,8 +5,10 @@ vertex_source_default = """
 #version 330
 layout(location =0) in vec3 vertices;
 layout(location =1) in vec4 colors;
+layout(location =2) in vec3 normals;
 
 out vec4 newColor;
+out vec3 normal;
 
 // add a view-projection uniform and multiply it by the vertices
 uniform mat4 view_proj;
@@ -16,12 +18,15 @@ void main()
 {
     gl_Position = view_proj * model * vec4(vertices, 1.0f); // local->world->vp
     newColor = colors;
+    normal = normals;
 }
 """
 
 fragment_source_default = """
 #version 330
 in vec4 newColor;
+in vec3 normal;
+
 
 out vec4 outColor;
 

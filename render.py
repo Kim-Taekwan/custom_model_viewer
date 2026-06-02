@@ -51,7 +51,7 @@ class RenderWindow(pyglet.window.Window):
         self.move_up = False
         self.move_down = False
         self.cam_move_speed = 0.05
-        self.drag_move_speed = 0.01
+        self.drag_move_speed = 0.02
         self.pan_speed = 0.01
         self.cam_rotate_speed = 0.01
 
@@ -88,7 +88,7 @@ class RenderWindow(pyglet.window.Window):
 
         match self.render_mode:
             case 1: self.edge_batch.draw() # wireframe mode
-            case 2: self.face_batch.draw() # phong shading mode
+            case 2: self.face_batch.draw() # phong illumination mode
             case 3: pass # texture mode
             case 4: pass # normal mapping mode
             case _: pass
@@ -156,6 +156,9 @@ class RenderWindow(pyglet.window.Window):
     def load_model(self, filename, transform=None, face_color=None, point_color=[255, 255, 0, 255], edge_color=[255, 255, 255, 255]):
         mesh = Mesh(filename.split("/")[-1].split(".")[0])
         vertice = []
+        normals = []
+        vertex_normals = []
+        normal_coords = []
         indice = []
         face_colors = []
         edge_halfedges = {}
@@ -163,80 +166,93 @@ class RenderWindow(pyglet.window.Window):
 
         # parse .obj file
         with open(filename, "r") as file:
-            for line in file:
-                line = line.strip()
-                # vertex
-                if line.startswith("v "):
-                    if len(line.split()) != 4:
-                        print(f"Invalid vertex definition: {line}")
-                        continue
-                    x, y, z = map(float, line.split()[1:4])
-                    vertice.extend([x, y, z])
-                    mesh.vertices.append(Vertex(Vec3(x, y, z), len(mesh.vertices), point_color))
+            lines = [line.strip() for line in file]
 
-                # face
-                elif line.startswith("f "):
-                    # get only vertex index (ignore texture and normal indices)
-                    face_v_i = []
-                    vertex_indice = line.split()[1:]
-                    for vertex_index in vertex_indice:
-                        v_i = int(vertex_index.split("/")[0]) - 1
-                        face_v_i.append(v_i)
-                    if len(face_v_i) < 3:
-                        print(f"Invalid face definition: {line}")
-                        continue
+        # read vertices, vertex normals
+        for line in lines:
+            if line.startswith("v "):
+                if len(line.split()) != 4:
+                    print(f"Invalid vertex definition: {line}")
+                    continue
+                x, y, z = map(float, line.split()[1:4])
+                vertice.extend([x, y, z])
+                mesh.vertices.append(Vertex(Vec3(x, y, z), len(mesh.vertices), point_color))
+                normal_coords.append((0.0, 0.0, 0.0))
+            if line.startswith("vn "):
+                if len(line.split()) != 4:
+                    print(f"Invalid vertex normal definition: {line}")
+                    continue
+                x, y, z = map(float, line.split()[1:4])
+                vertex_normals.append((x, y, z))
 
-                    # triangulate the face if it has more than 3 vertices
-                    for i in range(1, len(face_v_i) - 1):
-                        indice.extend([face_v_i[0], face_v_i[i], face_v_i[i + 1]])
+        # read faces and generate halfedge data structure
+        for line in lines:
+            if line.startswith("f "):
+                # get only vertex index (ignore texture and normal indices)
+                face_v_i = []
+                vertex_indice = line.split()[1:]
+                for vertex_index in vertex_indice:
+                    vertex_info = vertex_index.split("/")
+                    v_i = int(vertex_info[0]) - 1
+                    vn_i = int(vertex_info[2]) - 1 if len(vertex_info) >= 3 and vertex_info[2] else None
+                    face_v_i.append(v_i)
+                    if vn_i is not None:
+                        normal_coords[v_i] = vertex_normals[vn_i]
+                if len(face_v_i) < 3:
+                    print(f"Invalid face definition: {line}")
+                    continue
+
+                # triangulate the face if it has more than 3 vertices
+                for i in range(1, len(face_v_i) - 1):
+                    indice.extend([face_v_i[0], face_v_i[i], face_v_i[i + 1]])
+                
+                # generate halfedges around the face
+                face = None
+                prev_halfedge = None
+                prev_twin_halfedge = None  
+                for i in range(len(face_v_i)):
+                    v_i_start = face_v_i[i]
+                    v_i_end = face_v_i[(i+1)%len(face_v_i)]
+                    v_start = mesh.vertices[v_i_start]
+                    v_end = mesh.vertices[v_i_end]
+                    edge = (v_i_start, v_i_end)
+                    revesed_edge = (v_i_end, v_i_start)
+
+                    # create halfedge and its twin if the edge is not created
+                    if edge not in edge_halfedges:
+                        halfedge = Halfedge(v_start)
+                        twin_halfedge = Halfedge(v_end)
+                        actual_edge = Edge(halfedge)
+
+                        edge_halfedges[edge] = halfedge
+                        edge_halfedges[revesed_edge] = twin_halfedge
+
+                        halfedge.edge = actual_edge
+                        twin_halfedge.edge = actual_edge
+                        halfedge.twin = twin_halfedge
+                        twin_halfedge.twin = halfedge
+
+                        mesh.edges.append(actual_edge)
+                        mesh.halfedges.append(halfedge)
+                        mesh.halfedges.append(twin_halfedge)
+                    else:
+                        halfedge = edge_halfedges[edge]
                     
-                    # generate halfedges around the face
-                    face = None
-                    prev_halfedge = None
-                    prev_twin_halfedge = None  
-                    for i in range(len(face_v_i)):
-                        v_i_start = face_v_i[i]
-                        v_i_end = face_v_i[(i+1)%len(face_v_i)]
-                        v_start = mesh.vertices[v_i_start]
-                        v_end = mesh.vertices[v_i_end]
-                        edge = (v_i_start, v_i_end)
-                        revesed_edge = (v_i_end, v_i_start)
-
-                        # create halfedge and its twin if the edge is not created
-                        if edge not in edge_halfedges:
-                            halfedge = Halfedge(v_start)
-                            twin_halfedge = Halfedge(v_end)
-                            actual_edge = Edge(halfedge)
-
-                            edge_halfedges[edge] = halfedge
-                            edge_halfedges[revesed_edge] = twin_halfedge
-
-                            halfedge.edge = actual_edge
-                            twin_halfedge.edge = actual_edge
-                            halfedge.twin = twin_halfedge
-                            twin_halfedge.twin = halfedge
-
-                            mesh.edges.append(actual_edge)
-                            mesh.halfedges.append(halfedge)
-                            mesh.halfedges.append(twin_halfedge)
-                        else:
-                            halfedge = edge_halfedges[edge]
-                        
-                        if v_start.halfedge is None:
-                            v_start.halfedge = halfedge
-                        if i == 0:
-                            face = Face(halfedge)
-                            mesh.faces.append(face)
-                            start_halfedge = halfedge
-                        if i == len(face_v_i) - 1:
-                            halfedge.next = start_halfedge
-                        if prev_halfedge:
-                            prev_halfedge.next = halfedge
-                        if prev_twin_halfedge and halfedge.twin.next is None:
-                            halfedge.twin.next = prev_twin_halfedge
-                        prev_halfedge = halfedge
-                        prev_twin_halfedge = halfedge.twin
-                        halfedge.face = face
+                    if v_start.halfedge is None:
+                        v_start.halfedge = halfedge
+                    if i == 0:
+                        face = Face(halfedge)
+                        mesh.faces.append(face)
+                        start_halfedge = halfedge
+                    if i == len(face_v_i) - 1:
+                        halfedge.next = start_halfedge
+                    if prev_halfedge:
+                        prev_halfedge.next = halfedge
+                    if prev_twin_halfedge and halfedge.twin.next is None:
+                        halfedge.twin.next = prev_twin_halfedge
+                    prev_halfedge = halfedge
+                    prev_twin_halfedge = halfedge.twin
+                    halfedge.face = face
 
         boundary_halfedges = {}
         for edge, halfedge in edge_halfedges.items():
@@ -246,6 +262,9 @@ class RenderWindow(pyglet.window.Window):
         
         for v_end, halfedge in boundary_halfedges.items():
             boundary_halfedges[halfedge.vertex.index].next = halfedge
+
+        for nx, ny, nz in normal_coords:
+            normals.extend([nx, ny, nz])
 
         self.meshes.append(mesh)
         mesh.print_info()
@@ -262,11 +281,11 @@ class RenderWindow(pyglet.window.Window):
         face_colors = face_color * (len(vertice) // 3)
         edge_colors = edge_color * (len(vertice) // 3)
 
-        self.add_faces(transform, vertice, indice, face_colors)
-        self.add_edges(transform, vertice, edge_indice, edge_colors)
+        self.add_faces(transform, vertice, indice, face_colors, normals)
+        self.add_edges(transform, vertice, edge_indice, edge_colors, normals)
         
 
-    def add_faces(self, transform, vertice, indice, color):
+    def add_faces(self, transform, vertice, indice, color, normal):
         '''
         Assign a group for each shape
         '''
@@ -276,18 +295,19 @@ class RenderWindow(pyglet.window.Window):
                         group = shape,
                         indices = indice,
                         vertices = ('f', vertice),
-                        colors = ('Bn', color))
+                        colors = ('Bn', color),
+                        normals = ('f', normal))
         self.shapes.append(shape)
 
-    def add_edges(self, transform, vertices, indices, color):
+    def add_edges(self, transform, vertice, indices, color, normal):
         shape = CustomGroup(transform, len(self.shapes))
-        shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertices)//3, GL_LINES, # type: ignore
+        shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_LINES, # type: ignore
             batch=self.edge_batch,
             group=shape,
             indices=indices,
-            vertices=('f', vertices),
-            colors=('Bn', color)
-        )
+            vertices=('f', vertice),
+            colors=('Bn', color),
+            normals = ('f', normal))
         self.shapes.append(shape)
          
     def run(self):
