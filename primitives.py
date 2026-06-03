@@ -10,14 +10,14 @@ class CustomGroup(pyglet.graphics.Group):
     '''
     To draw multiple 3D shapes in Pyglet, you should make a group for an object.
     '''
-    def __init__(self, transform_mat: Mat4, order, shader_mode = shader.ShaderMode.DEFAULT):
+    def __init__(self, transform_mat: Mat4, order, shader_mode = shader.ShaderMode.WIREFRAME):
         super().__init__(order)
 
         '''
         Create shader program for each shape
         '''
         self.shader_mode = shader_mode
-        if shader_mode == shader.ShaderMode.DEFAULT:
+        if shader_mode == shader.ShaderMode.WIREFRAME:
             self.shader_program = shader.create_program(
                 shader.vertex_source_default, shader.fragment_source_default
             )

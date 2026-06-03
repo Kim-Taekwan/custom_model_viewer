@@ -2,10 +2,11 @@ from pyglet.graphics.shader import Shader, ShaderProgram
 from enum import Enum
 
 class ShaderMode(Enum):
-    DEFAULT = 1
+    WIREFRAME = 1
     PHONG = 2
     GOURAUD = 3
     TEXTURED = 4
+    NORMALMAP = 5
 
 # create vertex and fragment shader sources
 vertex_source_default = """
@@ -190,10 +191,12 @@ vertex_source_textured = """
 layout(location =0) in vec3 vertices;
 layout(location =1) in vec3 normals;
 layout(location =2) in vec2 tex_coords;
+layout(location = 3) in vec3 tangents;
 
 out vec3 newNormal;
 out vec3 newPosition;
 out vec2 newTexCoords;
+out mat3 TBN;
 
 // add a view-projection uniform and multiply it by the vertices
 uniform mat4 view_proj;
@@ -203,9 +206,16 @@ void main()
 {
     vec4 worldPosition = model * vec4(vertices, 1.0f);
     gl_Position = view_proj * worldPosition; // local->world->vp
-    newNormal = normalize(mat3(model) * normals);
+    newNormal = normalize(transpose(inverse(mat3(model))) * normals);
     newPosition = worldPosition.xyz;
     newTexCoords = tex_coords;
+
+    vec3 N = newNormal;
+    vec3 T = normalize(transpose(inverse(mat3(model))) * tangents);
+    T = normalize(T - dot(T, N) * N);
+    vec3 B = normalize(cross(N, T));
+
+    TBN = mat3(T, B, N);
 }
 """
 
@@ -214,6 +224,7 @@ fragment_source_textured = """
 in vec3 newNormal;
 in vec3 newPosition;
 in vec2 newTexCoords;
+in mat3 TBN;
 
 out vec4 outColor;
 
@@ -231,6 +242,8 @@ uniform sampler2D baseColorTex;
 uniform sampler2D mixedAoTex;
 uniform sampler2D specularTex;
 uniform sampler2D roughnessTex;
+uniform sampler2D normalTex;
+uniform bool useNormalMapping;
 
 void main()
 {
@@ -239,14 +252,21 @@ void main()
     vec3 specular = texture(specularTex, newTexCoords).rgb;
     float roughness = texture(roughnessTex, newTexCoords).x;
 
-    vec3 color = vec3(0.0);
-    vec3 N = normalize(newNormal);
+    vec3 N;
+    if (useNormalMapping) {
+        vec3 tangentNormal = texture(normalTex, newTexCoords).rgb;
+        tangentNormal = 2.0 * tangentNormal - 1.0;
+        N = normalize(TBN * tangentNormal);
+    } else {
+        N = normalize(newNormal);
+    }
     vec3 V = normalize(viewPosition - newPosition);
     vec3 k_a = mixedAo * baseColor;
     vec3 k_d = baseColor;
     vec3 k_s = specular;
     float n = 1.0 / (0.02 * roughness + 0.001);
 
+    vec3 color = vec3(0.0);
     for (int i = 0; i < min(numLights, 10); i++) {
         vec3 lightVector = lights[i].position - newPosition;
         float distance = length(lightVector);

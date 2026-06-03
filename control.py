@@ -5,6 +5,7 @@ from pyglet.math import Mat4, Vec3, Vec4, Quaternion
 import math
 from render import RenderWindow
 from pyglet.gl import *
+from shader import ShaderMode
 
 
 class Control:
@@ -45,15 +46,17 @@ class Control:
         elif symbol == pyglet.window.key.R:
             self.window.reset_camera()
         elif symbol == pyglet.window.key._1:
-            self.window.render_mode = 1
+            self.window.render_mode = ShaderMode.WIREFRAME
         elif symbol == pyglet.window.key._2:
-            self.window.render_mode = 2
+            self.window.render_mode = ShaderMode.PHONG
         elif symbol == pyglet.window.key._3:
-            self.window.render_mode = 3
+            self.window.render_mode = ShaderMode.GOURAUD
         elif symbol == pyglet.window.key._4:
-            self.window.render_mode = 4
+            self.window.use_normal_mapping = False
+            self.window.render_mode = ShaderMode.TEXTURED
         elif symbol == pyglet.window.key._5:
-            self.window.render_mode = 5
+            self.window.use_normal_mapping = True
+            self.window.render_mode = ShaderMode.NORMALMAP
         elif symbol in [pyglet.window.key.LSHIFT, pyglet.window.key.RSHIFT]:
             self.window.cam_move_speed = 0.1
         elif symbol == pyglet.window.key.P:

@@ -18,7 +18,7 @@ class Mesh:
         print(f"# of vertices: {len(self.vertices)}")
         print(f"# of edges: {len(self.edges)}")
         print(f"# of faces: {len(self.faces)}")
-        print(f"# of halfedges: {len(self.halfedges)}")
+        #print(f"# of halfedges: {len(self.halfedges)}")
 
 class Halfedge:
     def __init__(self, vertex):
