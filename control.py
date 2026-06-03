@@ -132,5 +132,5 @@ class Control:
         # zoom in/out by changing cam_eye position
         if scroll_y != 0:
             cam_direction = self.window.cam_target - self.window.cam_eye
-            self.window.cam_eye += cam_direction * scroll_y * 0.2
+            self.window.cam_eye += cam_direction * scroll_y * 0.1
             self.window.update_view_mat()

@@ -3,9 +3,9 @@ from enum import Enum
 
 class ShaderMode(Enum):
     DEFAULT = 1
-    FLAT = 2
+    PHONG = 2
     GOURAUD = 3
-    PHONG = 4
+    TEXTURED = 4
 
 # create vertex and fragment shader sources
 vertex_source_default = """
@@ -39,7 +39,7 @@ void main()
 """
 
 
-# Gouraud shading shader sources
+# Gouraud illumination shader sources
 vertex_source_gouraud = """
 #version 330
 layout(location =0) in vec3 vertices;
@@ -109,7 +109,7 @@ void main()
 """
 
 
-# Phong shading shader sources
+# Phong illumination shader sources
 vertex_source_phong = """
 #version 330
 layout(location =0) in vec3 vertices;
@@ -182,6 +182,91 @@ void main()
     outColor = vec4(color, newColor.a);
 }
 """
+
+
+# Textured Phong illumination shader sources
+vertex_source_textured = """
+#version 330
+layout(location =0) in vec3 vertices;
+layout(location =1) in vec3 normals;
+layout(location =2) in vec2 tex_coords;
+
+out vec3 newNormal;
+out vec3 newPosition;
+out vec2 newTexCoords;
+
+// add a view-projection uniform and multiply it by the vertices
+uniform mat4 view_proj;
+uniform mat4 model;
+
+void main()
+{
+    vec4 worldPosition = model * vec4(vertices, 1.0f);
+    gl_Position = view_proj * worldPosition; // local->world->vp
+    newNormal = normalize(mat3(model) * normals);
+    newPosition = worldPosition.xyz;
+    newTexCoords = tex_coords;
+}
+"""
+
+fragment_source_textured = """
+#version 330
+in vec3 newNormal;
+in vec3 newPosition;
+in vec2 newTexCoords;
+
+out vec4 outColor;
+
+struct PointLight {
+    vec3 position;
+    vec3 color;
+    float intensity;
+};
+
+uniform int numLights;
+uniform PointLight lights[10];
+uniform vec3 viewPosition;
+
+uniform sampler2D baseColorTex;
+uniform sampler2D mixedAoTex;
+uniform sampler2D specularTex;
+uniform sampler2D roughnessTex;
+
+void main()
+{
+    vec3 baseColor = texture(baseColorTex, newTexCoords).rgb;
+    vec3 mixedAo = texture(mixedAoTex, newTexCoords).rgb;
+    vec3 specular = texture(specularTex, newTexCoords).rgb;
+    float roughness = texture(roughnessTex, newTexCoords).x;
+
+    vec3 color = vec3(0.0);
+    vec3 N = normalize(newNormal);
+    vec3 V = normalize(viewPosition - newPosition);
+    vec3 k_a = mixedAo * baseColor;
+    vec3 k_d = baseColor;
+    vec3 k_s = specular;
+    float n = 1.0 / (0.02 * roughness + 0.001);
+
+    for (int i = 0; i < min(numLights, 10); i++) {
+        vec3 lightVector = lights[i].position - newPosition;
+        float distance = length(lightVector);
+        vec3 L = normalize(lightVector);
+        vec3 R = reflect(-L, N);
+
+        float attenuation = 1.0; // Suppose sunlight
+        vec3 radiance = lights[i].color * lights[i].intensity;
+
+        vec3 diffuse = attenuation * radiance * k_d * max(dot(N, L), 0.0);
+        vec3 specular = attenuation * radiance * k_s * pow(max(dot(R, V), 0.0), n);
+        vec3 ambient = k_a * radiance;
+
+        color += ambient + diffuse + specular;
+    }
+
+    outColor = vec4(color, 1.0);
+}
+"""
+
 
 def create_program(vs_source, fs_source):
     # compile the vertex and fragment sources to a shader program
