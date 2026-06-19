@@ -45,22 +45,44 @@ class Control:
             self.window.move_down = True
         elif symbol == pyglet.window.key.R:
             self.window.reset_camera()
+            if self.window.render_mode == ShaderMode.TEXTURED:
+                self.window.use_base_color_tex = True
+                self.window.use_AO_tex = True
+                self.window.use_specular_tex = True
+                self.window.use_roughness_tex = True
+                self.window.use_normal_mapping = True
+
         elif symbol == pyglet.window.key._1:
-            self.window.render_mode = ShaderMode.WIREFRAME
+            self.window.modeStr = 'Wireframe Mode'
+            self.window.render_mode = ShaderMode.DEFAULT
         elif symbol == pyglet.window.key._2:
-            self.window.render_mode = ShaderMode.PHONG
-        elif symbol == pyglet.window.key._3:
+            self.window.modeStr = 'Gouraud Illumination Mode'
             self.window.render_mode = ShaderMode.GOURAUD
+        elif symbol == pyglet.window.key._3:
+            self.window.modeStr = 'Phong Illumination Mode'
+            self.window.render_mode = ShaderMode.PHONG
         elif symbol == pyglet.window.key._4:
-            self.window.use_normal_mapping = False
-            self.window.render_mode = ShaderMode.TEXTURED
+            self.window.modeStr = 'Blinn-Phong Illumination Mode'
+            self.window.render_mode = ShaderMode.BLINN_PHONG
         elif symbol == pyglet.window.key._5:
-            self.window.use_normal_mapping = True
-            self.window.render_mode = ShaderMode.NORMALMAP
+            self.window.modeStr = 'Texture Mode'
+            self.window.render_mode = ShaderMode.TEXTURED
         elif symbol in [pyglet.window.key.LSHIFT, pyglet.window.key.RSHIFT]:
-            self.window.cam_move_speed = 0.1
+            self.window.cam_speed = self.window.cam_dash_speed
         elif symbol == pyglet.window.key.P:
             self.window.save_screenshot()
+
+        if self.window.render_mode == ShaderMode.TEXTURED:
+            if symbol == pyglet.window.key.Z:
+                self.window.use_base_color_tex = not self.window.use_base_color_tex
+            elif symbol == pyglet.window.key.X:
+                self.window.use_AO_tex = not self.window.use_AO_tex
+            elif symbol == pyglet.window.key.C:
+                self.window.use_specular_tex = not self.window.use_specular_tex
+            elif symbol == pyglet.window.key.V:
+                self.window.use_roughness_tex = not self.window.use_roughness_tex
+            elif symbol == pyglet.window.key.B:
+                self.window.use_normal_mapping = not self.window.use_normal_mapping
     
     def on_key_release(self, symbol, modifier):
         if symbol == pyglet.window.key.ESCAPE:
@@ -82,7 +104,7 @@ class Control:
         elif symbol in [pyglet.window.key.Q, pyglet.window.key.PAGEDOWN]:
             self.window.move_down = False
         elif symbol in [pyglet.window.key.LSHIFT, pyglet.window.key.RSHIFT]:
-            self.window.cam_move_speed = 0.05
+            self.window.cam_speed = self.window.cam_move_speed
 
     def on_mouse_motion(self, x, y, dx, dy):
         # TODO:

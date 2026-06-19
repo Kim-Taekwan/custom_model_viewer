@@ -6,7 +6,7 @@ from pyglet.window import mouse,key
 
 from pyglet.graphics.shader import Shader, ShaderProgram
 from pyglet.gl import GL_TRIANGLES
-from pyglet.math import Mat4, Vec3, Vec4
+from pyglet.math import Mat4, Mat3, Vec3, Vec4
 from pyglet.gl import *
 import random
 
@@ -14,7 +14,7 @@ import shader
 from primitives import CustomGroup
 from halfedge import Mesh, Halfedge, Vertex, Edge, Face
 from shader import ShaderMode
-
+from material import Material, TextureType
 
 
 class RenderWindow(pyglet.window.Window):
@@ -26,12 +26,13 @@ class RenderWindow(pyglet.window.Window):
         self.wireframe_batch = pyglet.graphics.Batch()
         self.default_batch = pyglet.graphics.Batch()
         self.phong_batch = pyglet.graphics.Batch()
+        self.blinn_phong_batch = pyglet.graphics.Batch()
         self.gouraud_batch = pyglet.graphics.Batch()        
-        self.textured_batch = pyglet.graphics.Batch()
+        self.material_batch = pyglet.graphics.Batch()
         '''
         View (camera) parameters
         '''
-        self.initial_cam_eye = Vec3(0, 0, 25)
+        self.initial_cam_eye = Vec3(0, 10, 20)
         self.initial_cam_target = Vec3(0, 0, 0)
         self.initial_cam_vup = Vec3(0, 1, 0)
 
@@ -43,11 +44,11 @@ class RenderWindow(pyglet.window.Window):
         Projection parameters
         '''
         self.z_near = 0.01
-        self.z_far = 100
+        self.z_far = 500
         self.fov = 60
         self.proj_mat = None
 
-        self.shapes = []
+        self.shapes: list[CustomGroup] = []
         self.setup()
 
         self.animate = False
@@ -57,16 +58,23 @@ class RenderWindow(pyglet.window.Window):
         self.move_backward = False
         self.move_up = False
         self.move_down = False
-        self.cam_move_speed = 0.05
+        self.cam_move_speed = 0.5
+        self.cam_dash_speed = 1.0
+        self.cam_speed = self.cam_move_speed
         self.drag_move_speed = 0.02
         self.pan_speed = 0.01
         self.cam_rotate_speed = 0.01
         self.spin_light = False
 
-        self.render_mode = ShaderMode.WIREFRAME
+        self.render_mode = ShaderMode.DEFAULT
         self.meshes = []
         self.lights = []
+        self.use_base_color_tex = False
+        self.use_AO_tex = False
+        self.use_specular_tex = False
+        self.use_roughness_tex = False
         self.use_normal_mapping = False
+        self.modeStr = 'Wireframe Mode'
 
     def setup(self) -> None:
         self.set_minimum_size(width = 400, height = 300)
@@ -93,18 +101,21 @@ class RenderWindow(pyglet.window.Window):
 
     def on_draw(self) -> None:
         self.clear()
-
-        if self.render_mode == ShaderMode.WIREFRAME:
-            self.wireframe_batch.draw()
-        elif self.render_mode == ShaderMode.PHONG:
-            self.phong_batch.draw()
-        elif self.render_mode == ShaderMode.GOURAUD:
-            self.gouraud_batch.draw()
-        elif self.render_mode == ShaderMode.TEXTURED:
-            self.textured_batch.draw()
-        elif self.render_mode == ShaderMode.NORMALMAP:
-            self.textured_batch.draw()
+        match self.render_mode:
+            case ShaderMode.DEFAULT:
+                self.wireframe_batch.draw()
+            case ShaderMode.PHONG:
+                self.phong_batch.draw()
+            case ShaderMode.BLINN_PHONG:
+                self.blinn_phong_batch.draw()
+            case ShaderMode.GOURAUD:
+                self.gouraud_batch.draw()
+            case ShaderMode.TEXTURED:
+                self.material_batch.draw()
         
+        modeText = pyglet.text.Label(self.modeStr, font_size=30, x=10, y=10)
+        modeText.draw()
+                        
 
     def update(self,dt) -> None:
         view_proj = self.proj_mat @ self.view_mat # type: ignore
@@ -114,28 +125,28 @@ class RenderWindow(pyglet.window.Window):
         right = cam_direction.cross(self.cam_vup).normalize()
         up = right.cross(cam_direction).normalize()
         if self.move_left:
-            self.cam_eye -= (right * self.cam_move_speed)
-            self.cam_target -= (right * self.cam_move_speed)
+            self.cam_eye -= (right * self.cam_speed)
+            self.cam_target -= (right * self.cam_speed)
             self.update_view_mat()
         if self.move_right:
-            self.cam_eye += (right * self.cam_move_speed)
-            self.cam_target += (right * self.cam_move_speed)
+            self.cam_eye += (right * self.cam_speed)
+            self.cam_target += (right * self.cam_speed)
             self.update_view_mat()
         if self.move_forward:
-            self.cam_eye += (cam_direction * self.cam_move_speed)
-            self.cam_target += (cam_direction * self.cam_move_speed)
+            self.cam_eye += (cam_direction * self.cam_speed)
+            self.cam_target += (cam_direction * self.cam_speed)
             self.update_view_mat()
         if self.move_backward:
-            self.cam_eye -= (cam_direction * self.cam_move_speed)
-            self.cam_target -= (cam_direction * self.cam_move_speed)
+            self.cam_eye -= (cam_direction * self.cam_speed)
+            self.cam_target -= (cam_direction * self.cam_speed)
             self.update_view_mat()
         if self.move_up:
-            self.cam_eye += (up * self.cam_move_speed)
-            self.cam_target += (up * self.cam_move_speed)
+            self.cam_eye += (up * self.cam_speed)
+            self.cam_target += (up * self.cam_speed)
             self.update_view_mat()
         if self.move_down:
-            self.cam_eye -= (up * self.cam_move_speed)
-            self.cam_target -= (up * self.cam_move_speed)
+            self.cam_eye -= (up * self.cam_speed)
+            self.cam_target -= (up * self.cam_speed)
             self.update_view_mat()
 
         if self.spin_light:
@@ -168,17 +179,22 @@ class RenderWindow(pyglet.window.Window):
             '''
             shape.shader_program['view_proj'] = view_proj
 
-            if shape.shader_mode in [ShaderMode.PHONG, ShaderMode.GOURAUD, ShaderMode.TEXTURED]:
+            if shape.shader_mode in [ShaderMode.GOURAUD, ShaderMode.PHONG, ShaderMode.BLINN_PHONG, ShaderMode.TEXTURED]:
                 shape.shader_program["viewPosition"] = self.cam_eye
                 shape.shader_program["numLights"] = len(self.lights)
-
                 for i, light in enumerate(self.lights):
                     shape.shader_program[f"lights[{i}].position"] = light["position"]
                     shape.shader_program[f"lights[{i}].color"] = light["color"]
                     shape.shader_program[f"lights[{i}].intensity"] = light["intensity"]
+                    shape.shader_program[f"lights[{i}].hasAttenuation"] = light["has_attenuation"]
 
             if shape.shader_mode == ShaderMode.TEXTURED:
+                shape.shader_program["useBaseColor"] = self.use_base_color_tex
+                shape.shader_program["useAO"] = self.use_AO_tex
+                shape.shader_program["useSpecular"] = self.use_specular_tex
+                shape.shader_program["useRoughness"] = self.use_roughness_tex
                 shape.shader_program["useNormalMapping"] = self.use_normal_mapping
+
 
 
     def on_resize(self, width, height):
@@ -199,7 +215,7 @@ class RenderWindow(pyglet.window.Window):
         screenshot.save(f"Screenshots/{filename}.png")
         print(f"Screenshot Saved")
     
-    def load_model(self, filename, transform=None, color=None, edge_color=[255, 255, 255, 255], texture_group=None):
+    def load_model(self, filename, transform=None, color=None, edge_color=[255, 255, 255, 255], material=None):
         mesh = Mesh(filename.split("/")[-1].split(".")[0])
         
         vertices = []
@@ -241,8 +257,7 @@ class RenderWindow(pyglet.window.Window):
                 x, y, z = map(float, line.split()[1:4])
                 normal_coords.append((x, y, z))
                 has_vn = True
-            
-
+        
         # read faces and generate halfedge data structure
         for line in lines:
             if line.startswith("f "):
@@ -305,15 +320,16 @@ class RenderWindow(pyglet.window.Window):
                     d = uv2[1] - uv0[1]
 
                     denominator = a * d - b * c
-                    tangent = (dp1 * d - dp2 * c) * 1.0 / denominator
+                    if abs(denominator) > 0:
+                        tangent = (dp1 * d - dp2 * c) * 1.0 / denominator
 
-                    if tangent.length() > 0:
-                        tangent = tangent.normalize()
+                        if tangent.length() > 0:
+                            tangent = tangent.normalize()
 
-                    for j in [i0, i1, i2]:
-                        tangents[j*3+0] += tangent.x
-                        tangents[j*3+1] += tangent.y
-                        tangents[j*3+2] += tangent.z
+                        for j in [i0, i1, i2]:
+                            tangents[j*3+0] += tangent.x
+                            tangents[j*3+1] += tangent.y
+                            tangents[j*3+2] += tangent.z
 
                     if not has_vn:
                         # get face normal to calculate area-averaged vertex normals
@@ -417,15 +433,16 @@ class RenderWindow(pyglet.window.Window):
 
         self.add_faces(transform, vertices, indices, face_colors, normals)
         self.add_wireframes(transform, vertices, wire_indices, edge_colors, normals)
-        if texture_group is not None:
-            self.add_textured_faces(transform, vertices, indices, normals, vertex_textures, tangents, texture_group)
+        if material is None:
+            material = Material() # set default material
+        self.add_faces_with_material(transform, vertices, indices, face_colors, normals, vertex_textures, tangents, material)
         
 
-    def add_faces(self, transform, vertice, indice, color, normal, texture_group=None):
+    def add_faces(self, transform, vertice, indice, color, normal, material=None):
         '''
         Assign a group for each shape
         '''
-        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.WIREFRAME)
+        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.DEFAULT)
         shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_TRIANGLES, # type: ignore
                         batch = self.default_batch,
                         group = shape,
@@ -453,22 +470,35 @@ class RenderWindow(pyglet.window.Window):
                         colors = ('Bn', color),
                         normals = ('f', normal))
         self.shapes.append(shape)
-    
-    def add_textured_faces(self, transform, vertice, indice, normal, texture_coords, tangent, texture_group):
-        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.TEXTURED)
+
+        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.BLINN_PHONG)
         shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_TRIANGLES, # type: ignore
-                        batch = self.textured_batch,
+                        batch = self.blinn_phong_batch,
                         group = shape,
                         indices = indice,
                         vertices = ('f', vertice),
+                        colors = ('Bn', color),
+                        normals = ('f', normal))
+        self.shapes.append(shape)
+    
+    def add_faces_with_material(self, transform, vertice, indice, color, normal, texture_coords, tangent, material):
+        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.TEXTURED)
+        shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_TRIANGLES, # type: ignore
+                        batch = self.material_batch,
+                        group = shape,
+                        indices = indice,
+                        vertices = ('f', vertice),
+                        colors = ('Bn', color),
                         normals = ('f', normal),
                         tex_coords = ('f', texture_coords),
-                        tangents = ('f', tangent))
-        texture_group.bind_textures(shape.shader_program)
+                        tangents = ('f', tangent)
+        )
+        material.bind_textures(shape)
+        shape.material = material
         self.shapes.append(shape)
 
     def add_wireframes(self, transform, vertice, indices, color, normal):
-        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.WIREFRAME)
+        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.DEFAULT)
         shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_LINES, # type: ignore
             batch=self.wireframe_batch,
             group=shape,
@@ -478,12 +508,20 @@ class RenderWindow(pyglet.window.Window):
             normals = ('f', normal))
         self.shapes.append(shape)
 
-    def add_point_light(self, position, color=Vec3(1.0, 1.0, 1.0), intensity=1.0):
+    def add_point_light(self, position, color=Vec3(1.0, 1.0, 1.0), intensity=1.0, has_attenuation=True):
         self.lights.append({
             "position": position,
             "color": color,
-            "intensity": intensity
+            "intensity": intensity,
+            "has_attenuation": has_attenuation
         })
+
+    # Area light (implemented as collection of point lights)
+    def add_area_light(self, width, depth, interval=5, transform=Mat4.from_translation(Vec3(0, 0, 0)), color=Vec3(1.0, 1.0, 1.0), intensity=0.1, has_attenuation=True):
+        for x in range(int(-width/2), int(width/2) + 1, interval):
+            for z in range(int(-depth/2), int(depth/2) + 1, interval):
+                position = transform @ Vec4(x, 0, z, 1)
+                self.add_point_light(Vec3(position.x, position.y, position.z), color, intensity, has_attenuation)
          
     def run(self):
         pyglet.clock.schedule_interval(self.update, 1/60)

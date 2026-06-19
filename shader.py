@@ -2,11 +2,11 @@ from pyglet.graphics.shader import Shader, ShaderProgram
 from enum import Enum
 
 class ShaderMode(Enum):
-    WIREFRAME = 1
-    PHONG = 2
-    GOURAUD = 3
-    TEXTURED = 4
-    NORMALMAP = 5
+    DEFAULT = 1
+    GOURAUD = 2
+    PHONG = 3
+    BLINN_PHONG = 4
+    TEXTURED = 5
 
 # create vertex and fragment shader sources
 vertex_source_default = """
@@ -57,10 +57,11 @@ struct PointLight {
     vec3 position;
     vec3 color;
     float intensity;
+    bool hasAttenuation;
 };
 
 uniform int numLights;
-uniform PointLight lights[10];
+uniform PointLight lights[1000];
 uniform vec3 viewPosition;
 
 void main()
@@ -68,31 +69,31 @@ void main()
     vec4 worldPosition = model * vec4(vertices, 1.0f);
     gl_Position = view_proj * worldPosition; // local->world->vp
 
-    vec3 lightColor = vec3(0.0);
-    vec3 N = normalize(mat3(model) * normals);
+    vec3 N = normalize(transpose(inverse(mat3(model))) * normals);
     vec3 V = normalize(viewPosition - worldPosition.xyz);
     vec3 k_a = vec3(0.1); // ambient coefficient
     vec3 k_d = vec3(0.5); // diffuse coefficient
     vec3 k_s = vec3(0.8); // specular coefficient
     float n = 8.0; // shininess parameter
 
-    for (int i = 0; i < min(numLights, 10); i++) {
+    vec3 diffuse = vec3(0.0);
+    vec3 specular = vec3(0.0);
+    vec3 ambient = vec3(0.0);
+    for (int i = 0; i < min(numLights, 1000); i++) {
         vec3 lightVector = lights[i].position - worldPosition.xyz;
         float distance = length(lightVector);
         vec3 L = normalize(lightVector);
         vec3 R = reflect(-L, N);
 
-        float attenuation = 1.0; // Suppose sunlight
+        float attenuation = lights[i].hasAttenuation ? 1 / (1 + 0.001 * distance + 0.00005 * distance * distance) : 1;
         vec3 radiance = lights[i].color * lights[i].intensity;
 
-        vec3 diffuse = attenuation * radiance * k_d * max(dot(N, L), 0.0);
-        vec3 specular = attenuation * radiance * k_s * pow(max(dot(R, V), 0.0), n);
-        vec3 ambient = k_a * radiance;
-
-        lightColor += ambient + diffuse + specular;
+        diffuse += attenuation * radiance * k_d * max(dot(N, L), 0.0);
+        specular += attenuation * radiance * k_s * pow(max(dot(R, V), 0.0), n);
+        ambient += k_a * radiance;
     }
 
-    vec3 color = colors.rgb * lightColor;
+    vec3 color = colors.rgb * (ambient + diffuse) + specular;
     newColor = vec4(color, colors.a);
 }
 """
@@ -130,7 +131,7 @@ void main()
     vec4 worldPosition = model * vec4(vertices, 1.0f);
     gl_Position = view_proj * worldPosition; // local->world->vp
     newColor = colors;
-    newNormal = normalize(mat3(model) * normals);
+    newNormal = normalize(transpose(inverse(mat3(model))) * normals);
     newPosition = worldPosition.xyz;
 }
 """
@@ -147,15 +148,15 @@ struct PointLight {
     vec3 position;
     vec3 color;
     float intensity;
+    bool hasAttenuation;
 };
 
 uniform int numLights;
-uniform PointLight lights[10];
+uniform PointLight lights[1000];
 uniform vec3 viewPosition;
 
 void main()
 {
-    vec3 lightColor = vec3(0.0);
     vec3 N = normalize(newNormal);
     vec3 V = normalize(viewPosition - newPosition);
     vec3 k_a = vec3(0.1); // ambient coefficient
@@ -163,36 +164,115 @@ void main()
     vec3 k_s = vec3(0.8); // specular coefficient
     float n = 8.0; // shininess parameter
 
-    for (int i = 0; i < min(numLights, 10); i++) {
+    vec3 diffuse = vec3(0.0);
+    vec3 specular = vec3(0.0);
+    vec3 ambient = vec3(0.0);
+    for (int i = 0; i < min(numLights, 1000); i++) {
         vec3 lightVector = lights[i].position - newPosition;
         float distance = length(lightVector);
         vec3 L = normalize(lightVector);
         vec3 R = reflect(-L, N);
 
-        float attenuation = 1.0; // Suppose sunlight
+        float attenuation = lights[i].hasAttenuation ? 1 / (1 + 0.001 * distance + 0.00005 * distance * distance) : 1;
         vec3 radiance = lights[i].color * lights[i].intensity;
 
-        vec3 diffuse = attenuation * radiance * k_d * max(dot(N, L), 0.0);
-        vec3 specular = attenuation * radiance * k_s * pow(max(dot(R, V), 0.0), n);
-        vec3 ambient = k_a * radiance;
-
-        lightColor += ambient + diffuse + specular;
+        diffuse += attenuation * radiance * k_d * max(dot(N, L), 0.0);
+        specular += attenuation * radiance * k_s * pow(max(dot(R, V), 0.0), n);
+        ambient += k_a * radiance;
     }
 
-    vec3 color = newColor.rgb * lightColor;
+    vec3 color = newColor.rgb * (ambient + diffuse) + specular;
+    outColor = vec4(color, newColor.a);
+}
+"""
+
+
+# Blinn-Phong illumination shader sources
+vertex_source_blinn_phong = """
+#version 330
+layout(location =0) in vec3 vertices;
+layout(location =1) in vec4 colors;
+layout(location =2) in vec3 normals;
+
+out vec4 newColor;
+out vec3 newNormal;
+out vec3 newPosition;
+
+// add a view-projection uniform and multiply it by the vertices
+uniform mat4 view_proj;
+uniform mat4 model;
+
+void main()
+{
+    vec4 worldPosition = model * vec4(vertices, 1.0f);
+    gl_Position = view_proj * worldPosition; // local->world->vp
+    newColor = colors;
+    newNormal = normalize(transpose(inverse(mat3(model))) * normals);
+    newPosition = worldPosition.xyz;
+}
+"""
+
+fragment_source_blinn_phong = """
+#version 330
+in vec4 newColor;
+in vec3 newNormal;
+in vec3 newPosition;
+
+out vec4 outColor;
+
+struct PointLight {
+    vec3 position;
+    vec3 color;
+    float intensity;
+    bool hasAttenuation;
+};
+
+uniform int numLights;
+uniform PointLight lights[1000];
+uniform vec3 viewPosition;
+
+void main()
+{
+    vec3 N = normalize(newNormal);
+    vec3 V = normalize(viewPosition - newPosition);
+    vec3 k_a = vec3(0.1); // ambient coefficient
+    vec3 k_d = vec3(0.5); // diffuse coefficient
+    vec3 k_s = vec3(0.8); // specular coefficient
+    float n = 24.0; // shininess parameter
+    
+    vec3 diffuse = vec3(0.0);
+    vec3 specular = vec3(0.0);
+    vec3 ambient = vec3(0.0);
+    for (int i = 0; i < min(numLights, 1000); i++) {
+        vec3 lightVector = lights[i].position - newPosition;
+        float distance = length(lightVector);
+        vec3 L = normalize(lightVector);
+        vec3 H = normalize(L + V);
+
+        float attenuation = lights[i].hasAttenuation ? 1 / (1 + 0.001 * distance + 0.00005 * distance * distance) : 1;
+        vec3 radiance = lights[i].color * lights[i].intensity;
+
+        diffuse += attenuation * radiance * k_d * max(dot(N, L), 0.0);
+        specular += attenuation * radiance * k_s * pow(max(dot(N, H), 0.0), n);
+        ambient += k_a * radiance;
+    }
+
+    vec3 color = newColor.rgb * (ambient + diffuse) + specular;
     outColor = vec4(color, newColor.a);
 }
 """
 
 
 # Textured Phong illumination shader sources
-vertex_source_textured = """
+vertex_source_material = """
 #version 330
 layout(location =0) in vec3 vertices;
-layout(location =1) in vec3 normals;
-layout(location =2) in vec2 tex_coords;
-layout(location = 3) in vec3 tangents;
+layout(location =1) in vec4 colors;
+layout(location =2) in vec3 normals;
+layout(location =3) in vec2 tex_coords;
+layout(location =4) in vec3 tangents;
 
+out vec4 newColor;
 out vec3 newNormal;
 out vec3 newPosition;
 out vec2 newTexCoords;
@@ -209,6 +289,7 @@ void main()
     newNormal = normalize(transpose(inverse(mat3(model))) * normals);
     newPosition = worldPosition.xyz;
     newTexCoords = tex_coords;
+    newColor = colors;
 
     vec3 N = newNormal;
     vec3 T = normalize(transpose(inverse(mat3(model))) * tangents);
@@ -219,8 +300,9 @@ void main()
 }
 """
 
-fragment_source_textured = """
+fragment_source_material = """
 #version 330
+in vec4 newColor;
 in vec3 newNormal;
 in vec3 newPosition;
 in vec2 newTexCoords;
@@ -232,25 +314,38 @@ struct PointLight {
     vec3 position;
     vec3 color;
     float intensity;
+    bool hasAttenuation;
 };
 
 uniform int numLights;
-uniform PointLight lights[10];
+uniform PointLight lights[1000];
 uniform vec3 viewPosition;
+
+uniform vec3 ka;
+uniform vec3 kd;
+uniform vec3 ks;
+uniform float r;
 
 uniform sampler2D baseColorTex;
 uniform sampler2D mixedAoTex;
 uniform sampler2D specularTex;
 uniform sampler2D roughnessTex;
 uniform sampler2D normalTex;
+
+uniform bool useBaseColor;
+uniform bool useAO;
+uniform bool useSpecular;
+uniform bool useRoughness;
 uniform bool useNormalMapping;
 
 void main()
 {
-    vec3 baseColor = texture(baseColorTex, newTexCoords).rgb;
-    vec3 mixedAo = texture(mixedAoTex, newTexCoords).rgb;
-    vec3 specular = texture(specularTex, newTexCoords).rgb;
-    float roughness = texture(roughnessTex, newTexCoords).x;
+    vec3 baseColor = (useBaseColor ? texture(baseColorTex, newTexCoords).rgb : newColor.rgb);
+    vec3 k_a = (useAO ? texture(mixedAoTex, newTexCoords).rgb * baseColor : ka);
+    vec3 k_s = (useSpecular ? texture(specularTex, newTexCoords).rgb : ks);
+    vec3 k_d = (useBaseColor ? texture(baseColorTex, newTexCoords).rgb : kd);
+    float roughness = (useRoughness ? texture(roughnessTex, newTexCoords).x : r);
+    float n = 1.0 / (0.02 * roughness + 0.001); // shininess parameter
 
     vec3 N;
     if (useNormalMapping) {
@@ -261,29 +356,29 @@ void main()
         N = normalize(newNormal);
     }
     vec3 V = normalize(viewPosition - newPosition);
-    vec3 k_a = mixedAo * baseColor;
-    vec3 k_d = baseColor;
-    vec3 k_s = specular;
-    float n = 1.0 / (0.02 * roughness + 0.001);
 
     vec3 color = vec3(0.0);
-    for (int i = 0; i < min(numLights, 10); i++) {
+    vec3 diffuse = vec3(0.0);
+    vec3 specular = vec3(0.0);
+    vec3 ambient = vec3(0.0);
+    for (int i = 0; i < min(numLights, 1000); i++) {
         vec3 lightVector = lights[i].position - newPosition;
         float distance = length(lightVector);
         vec3 L = normalize(lightVector);
         vec3 R = reflect(-L, N);
 
-        float attenuation = 1.0; // Suppose sunlight
+        float attenuation = lights[i].hasAttenuation ? 1 / (1 + 0.001 * distance + 0.00005 * distance * distance) : 1;
         vec3 radiance = lights[i].color * lights[i].intensity;
 
-        vec3 diffuse = attenuation * radiance * k_d * max(dot(N, L), 0.0);
-        vec3 specular = attenuation * radiance * k_s * pow(max(dot(R, V), 0.0), n);
-        vec3 ambient = k_a * radiance;
-
-        color += ambient + diffuse + specular;
+        diffuse += attenuation * radiance * k_d * max(dot(N, L), 0.0);
+        specular += attenuation * radiance * k_s * pow(max(dot(R, V), 0.0), n);
+        ambient += k_a * radiance;
     }
-
-    outColor = vec4(color, 1.0);
+    if (!useBaseColor)
+        color = newColor.rgb * (diffuse + ambient) + specular;
+    else
+        color = diffuse + specular + ambient;
+    outColor = vec4(color, newColor.a);
 }
 """
 
