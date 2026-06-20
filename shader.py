@@ -340,12 +340,17 @@ uniform bool useNormalMapping;
 
 void main()
 {
-    vec3 baseColor = (useBaseColor ? texture(baseColorTex, newTexCoords).rgb : newColor.rgb);
+    vec4 texColor = texture(baseColorTex, newTexCoords);
+
+    if (useBaseColor && texColor.a < 0.02)
+        discard;
+
+    vec3 baseColor = (useBaseColor ? texColor.rgb : newColor.rgb);
     vec3 k_a = (useAO ? texture(mixedAoTex, newTexCoords).rgb * baseColor : ka);
     vec3 k_s = (useSpecular ? texture(specularTex, newTexCoords).rgb : ks);
-    vec3 k_d = (useBaseColor ? texture(baseColorTex, newTexCoords).rgb : kd);
+    vec3 k_d = (useBaseColor ? baseColor : kd);
     float roughness = (useRoughness ? texture(roughnessTex, newTexCoords).x : r);
-    float n = 1.0 / (0.02 * roughness + 0.001); // shininess parameter
+    float n = 1.0 / (0.003 * roughness + 0.001); // shininess parameter
 
     vec3 N;
     if (useNormalMapping) {
@@ -366,19 +371,26 @@ void main()
         float distance = length(lightVector);
         vec3 L = normalize(lightVector);
         vec3 R = reflect(-L, N);
+        vec3 H = normalize(L + V);
 
         float attenuation = lights[i].hasAttenuation ? 1 / (1 + 0.001 * distance + 0.00005 * distance * distance) : 1;
         vec3 radiance = lights[i].color * lights[i].intensity;
 
         diffuse += attenuation * radiance * k_d * max(dot(N, L), 0.0);
-        specular += attenuation * radiance * k_s * pow(max(dot(R, V), 0.0), n);
+        specular += attenuation * radiance * k_s * pow(max(dot(N, H), 0.0), n);
         ambient += k_a * radiance;
     }
-    if (!useBaseColor)
+
+    float alpha;
+    if (!useBaseColor) {
         color = newColor.rgb * (diffuse + ambient) + specular;
-    else
+        alpha = newColor.a;
+    }
+    else {
         color = diffuse + specular + ambient;
-    outColor = vec4(color, newColor.a);
+        alpha = texColor.a;
+    }
+    outColor = vec4(color, alpha);
 }
 """
 

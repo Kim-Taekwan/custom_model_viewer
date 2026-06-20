@@ -9,6 +9,7 @@ from pyglet.gl import GL_TRIANGLES
 from pyglet.math import Mat4, Mat3, Vec3, Vec4
 from pyglet.gl import *
 import random
+import os
 
 import shader
 from primitives import CustomGroup
@@ -81,7 +82,9 @@ class RenderWindow(pyglet.window.Window):
         self.set_mouse_visible(True)
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_CULL_FACE)
-        #glClearColor(.3, .3, .3, 1)
+        glClearColor(.3, .3, .3, 1)
+        glEnable(GL_BLEND)
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         #glLineWidth(2.5)
 
         # 1. Create a view matrix
@@ -113,7 +116,7 @@ class RenderWindow(pyglet.window.Window):
             case ShaderMode.TEXTURED:
                 self.material_batch.draw()
         
-        modeText = pyglet.text.Label(self.modeStr, font_size=30, x=10, y=10)
+        modeText = pyglet.text.Label(self.modeStr, font_size=20, x=10, y=10)
         modeText.draw()
                         
 
@@ -188,12 +191,12 @@ class RenderWindow(pyglet.window.Window):
                     shape.shader_program[f"lights[{i}].intensity"] = light["intensity"]
                     shape.shader_program[f"lights[{i}].hasAttenuation"] = light["has_attenuation"]
 
-            if shape.shader_mode == ShaderMode.TEXTURED:
-                shape.shader_program["useBaseColor"] = self.use_base_color_tex
-                shape.shader_program["useAO"] = self.use_AO_tex
-                shape.shader_program["useSpecular"] = self.use_specular_tex
-                shape.shader_program["useRoughness"] = self.use_roughness_tex
-                shape.shader_program["useNormalMapping"] = self.use_normal_mapping
+            # if shape.shader_mode == ShaderMode.TEXTURED:
+            #     shape.shader_program["useBaseColor"] = self.use_base_color_tex
+            #     shape.shader_program["useAO"] = self.use_AO_tex
+            #     shape.shader_program["useSpecular"] = self.use_specular_tex
+            #     shape.shader_program["useRoughness"] = self.use_roughness_tex
+            #     shape.shader_program["useNormalMapping"] = self.use_normal_mapping
 
 
 
@@ -215,25 +218,24 @@ class RenderWindow(pyglet.window.Window):
         screenshot.save(f"Screenshots/{filename}.png")
         print(f"Screenshot Saved")
     
-    def load_model(self, filename, transform=None, color=None, edge_color=[255, 255, 255, 255], material=None):
-        mesh = Mesh(filename.split("/")[-1].split(".")[0])
-        
-        vertices = []
-        normals = []
-        indices = []
-        vertex_textures = []
+    def load_model(self, filename, transform=None, color=None, edge_color=[255, 255, 255, 255], material=None, material_map=None):
+        mesh_name = filename.split("/")[-1].split(".")[0]
+        mesh = Mesh(mesh_name)
 
-        face_colors = []
+        if transform is None:
+            transform = Mat4.from_translation(self.cam_target)
+        
+        if color is None:
+            color = [random.randint(40, 250), random.randint(40, 250), random.randint(40, 250), 255]
+
+        if material is None:
+            material = Material()        
+        
         vertex_coords = []
         texture_coords = []
         normal_coords = []
         has_vn = False # check if the obj file has vertex normal info
-        tangents = []
         
-        vertex_texture_map = {}
-        edge_halfedges = {}
-        wire_indices = []
-
         # parse .obj file
         with open(filename, "r") as file:
             lines = [line.strip() for line in file]
@@ -247,10 +249,10 @@ class RenderWindow(pyglet.window.Window):
                 x, y, z = map(float, line.split()[1:4])
                 vertex_coords.append((x, y, z))
                 mesh.vertices.append(Vertex(Vec3(x, y, z), len(mesh.vertices), color))
-            if line.startswith("vt "):
+            elif line.startswith("vt "):
                 u, v = map(float, line.split()[1:3])
                 texture_coords.append((u,v))            
-            if line.startswith("vn "):
+            elif line.startswith("vn "):
                 if len(line.split()) != 4:
                     print(f"Invalid vertex normal definition: {line}")
                     continue
@@ -258,12 +260,41 @@ class RenderWindow(pyglet.window.Window):
                 normal_coords.append((x, y, z))
                 has_vn = True
         
-        # read faces and generate halfedge data structure
-        for line in lines:
-            if line.startswith("f "):
-                face_shader_indices = []
-                face_obj_indices = []
+        edge_halfedges = {}
+        vertices = []
+        indices = []
+        normals = []
+        tangents = []
+        tex_coords = []
+        vertex_map = {}
 
+        material_name = mesh_name
+        sub_mat = None
+        isGrouping = False
+
+        # read faces
+        # generate halfedge data structure
+        # match material with mesh if those faces are grouped
+        for line in lines:
+            if line.startswith("usemtl "):
+                if isGrouping:
+                    self.build_mesh(transform, vertices, indices, normals, tex_coords, tangents, color, edge_color, sub_mat)
+                isGrouping = True
+                material_name = line.split()[1]
+                if material_map is None or material_map.get(material_name) is None:
+                    sub_mat = material
+                else:
+                    sub_mat = material_map.get(material_name)
+                vertices = []
+                indices = []
+                normals = []
+                tangents = []
+                tex_coords = []
+                vertex_map = {}
+
+            elif line.startswith("f "):
+                face_indices = []
+                face_obj_indices = []
                 vertex_indice = line.split()[1:]
                 for vertex_index in vertex_indice:
                     vertex_info = vertex_index.split("/")
@@ -273,44 +304,44 @@ class RenderWindow(pyglet.window.Window):
 
                     # accept duplicate vertices with different texture/normal indices
                     v_key = (v_i, vt_i, vn_i)
-                    if v_key in vertex_texture_map:
-                        shader_i = vertex_texture_map[v_key]
+                    if v_key in vertex_map:
+                        local_i = vertex_map[v_key]
                     else:
-                        shader_i = len(vertices) // 3
+                        local_i = len(vertices) // 3
 
                         x, y, z = vertex_coords[v_i]
                         u, v = texture_coords[vt_i] if vt_i is not None else (0.0, 0.0)
                         nx, ny, nz = normal_coords[vn_i] if vn_i is not None else (0.0, 0.0, 0.0)
                         
                         vertices.extend([x, y, z])
-                        vertex_textures.extend([u, v])
+                        tex_coords.extend([u, v])
                         normals.extend([nx, ny, nz])
                         tangents.extend([0.0, 0.0, 0.0])
 
-                        vertex_texture_map[v_key] = shader_i
+                        vertex_map[v_key] = local_i
 
-                    face_shader_indices.append(shader_i)
+                    face_indices.append(local_i)
                     face_obj_indices.append(v_i)
 
-                if len(face_shader_indices) < 3:
+                if len(face_indices) < 3:
                     print(f"Invalid face definition: {line}")
                     continue
 
                 # triangulate the face if it has more than 3 vertices
-                for j in range(1, len(face_shader_indices) - 1):
-                    i0 = face_shader_indices[0]
-                    i1 = face_shader_indices[j]
-                    i2 = face_shader_indices[j+1]
+                for j in range(1, len(face_indices) - 1):
+                    i0 = face_indices[0]
+                    i1 = face_indices[j]
+                    i2 = face_indices[j+1]
 
-                    indices.extend([i0,i1,i2])
+                    indices.extend([i0, i1, i2])
 
                     p0 = Vec3(*vertices[i0*3:i0*3+3])
                     p1 = Vec3(*vertices[i1*3:i1*3+3])
                     p2 = Vec3(*vertices[i2*3:i2*3+3])
-                    
-                    uv0 = vertex_textures[i0*2:i0*2+2]
-                    uv1 = vertex_textures[i1*2:i1*2+2]
-                    uv2 = vertex_textures[i2*2:i2*2+2]
+
+                    uv0 = tex_coords[i0*2:i0*2+2]
+                    uv1 = tex_coords[i1*2:i1*2+2]
+                    uv2 = tex_coords[i2*2:i2*2+2]
 
                     dp1 = p1 - p0
                     dp2 = p2 - p0
@@ -326,19 +357,19 @@ class RenderWindow(pyglet.window.Window):
                         if tangent.length() > 0:
                             tangent = tangent.normalize()
 
-                        for j in [i0, i1, i2]:
-                            tangents[j*3+0] += tangent.x
-                            tangents[j*3+1] += tangent.y
-                            tangents[j*3+2] += tangent.z
+                        for k in [i0, i1, i2]:
+                            tangents[k*3+0] += tangent.x
+                            tangents[k*3+1] += tangent.y
+                            tangents[k*3+2] += tangent.z
 
                     if not has_vn:
                         # get face normal to calculate area-averaged vertex normals
                         face_normal = (p1 - p0).cross(p2 - p0)
 
-                        for j in [i0,i1,i2]:
-                            normals[j*3+0] += face_normal.x
-                            normals[j*3+1] += face_normal.y
-                            normals[j*3+2] += face_normal.z
+                        for k in [i0,i1,i2]:
+                            normals[k*3+0] += face_normal.x
+                            normals[k*3+1] += face_normal.y
+                            normals[k*3+2] += face_normal.z
                 
                 # generate halfedges around the face
                 face = None
@@ -378,7 +409,7 @@ class RenderWindow(pyglet.window.Window):
                         face = Face(halfedge)
                         mesh.faces.append(face)
                         start_halfedge = halfedge
-                    if j == len(face_shader_indices) - 1:
+                    if j == len(face_indices) - 1:
                         halfedge.next = start_halfedge
                     if prev_halfedge:
                         prev_halfedge.next = halfedge
@@ -387,20 +418,34 @@ class RenderWindow(pyglet.window.Window):
                     prev_halfedge = halfedge
                     prev_twin_halfedge = halfedge.twin
                     halfedge.face = face
+        
+        if isGrouping:
+            self.build_mesh(transform, vertices, indices, normals, tex_coords, tangents, color, edge_color, sub_mat)
+        else:
+            self.build_mesh(transform, vertices, indices, normals, tex_coords, tangents, color, edge_color, material)
 
         boundary_halfedges = {}
         for edge, halfedge in edge_halfedges.items():
             if halfedge.face is None:
                 boundary_halfedges[edge[1]] = halfedge
-        
         for v_end, halfedge in boundary_halfedges.items():
             boundary_halfedges[halfedge.vertex.index].next = halfedge
 
-        for j in range(len(normals)//3):
-            normal = Vec3(*normals[j*3:j*3+3])
+        self.meshes.append(mesh)
+        mesh.print_info()
+        #for vertex in mesh.vertices:
+            #vertex.print_info()
+
+
+    def build_mesh(self, transform, vertices, indices, normals, tex_coords, tangents, color, edge_color, material):
+        if len(vertices) == 0:
+            return
+
+        for i in range(len(normals)//3):
+            normal = Vec3(*normals[i*3:i*3+3])
             if normal.length() > 0:
                 normal = normal.normalize()
-            normals[j*3:j*3+3] = [normal.x, normal.y, normal.z]
+            normals[i*3:i*3+3] = [normal.x, normal.y, normal.z]
         
         for j in range(len(tangents)//3):
             tangent = Vec3(*tangents[j*3:j*3+3])
@@ -408,6 +453,7 @@ class RenderWindow(pyglet.window.Window):
                 tangent = tangent.normalize()
             tangents[j*3:j*3+3] = [tangent.x, tangent.y, tangent.z]
 
+        wire_indices = []
         wire_set = set()
         for j in range(0, len(indices), 3):
             p0, p1, p2 = indices[j], indices[j+1], indices[j+2]
@@ -417,26 +463,13 @@ class RenderWindow(pyglet.window.Window):
                     wire_set.add(e)
                     wire_indices.extend([a, b])
 
-        self.meshes.append(mesh)
-        mesh.print_info()
-        #for vertex in mesh.vertices:
-            #vertex.print_info()
-
-        if transform is None:
-            transform = Mat4.from_translation(self.cam_target)
-
-        if color is None:
-            color = [random.randint(40, 250), random.randint(40, 250), random.randint(40, 250), 255]
-
         face_colors = color * (len(vertices) // 3)
         edge_colors = edge_color * (len(vertices) // 3)
 
         self.add_faces(transform, vertices, indices, face_colors, normals)
         self.add_wireframes(transform, vertices, wire_indices, edge_colors, normals)
-        if material is None:
-            material = Material() # set default material
-        self.add_faces_with_material(transform, vertices, indices, face_colors, normals, vertex_textures, tangents, material)
-        
+        self.add_faces_with_material(transform, vertices, indices, face_colors, normals, tex_coords, tangents, material)
+
 
     def add_faces(self, transform, vertice, indice, color, normal, material=None):
         '''
@@ -493,7 +526,7 @@ class RenderWindow(pyglet.window.Window):
                         tex_coords = ('f', texture_coords),
                         tangents = ('f', tangent)
         )
-        material.bind_textures(shape)
+        material.set_shader_vars(shape)
         shape.material = material
         self.shapes.append(shape)
 

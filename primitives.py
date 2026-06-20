@@ -48,6 +48,8 @@ class CustomGroup(pyglet.graphics.Group):
         self.shader_program.use()
         model = self.transform_mat
         self.shader_program['model'] = model
+        if self.material is not None:
+            self.material.bind_textures(self)
 
     def unset_state(self):
         self.shader_program.stop()

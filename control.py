@@ -45,13 +45,6 @@ class Control:
             self.window.move_down = True
         elif symbol == pyglet.window.key.R:
             self.window.reset_camera()
-            if self.window.render_mode == ShaderMode.TEXTURED:
-                self.window.use_base_color_tex = True
-                self.window.use_AO_tex = True
-                self.window.use_specular_tex = True
-                self.window.use_roughness_tex = True
-                self.window.use_normal_mapping = True
-
         elif symbol == pyglet.window.key._1:
             self.window.modeStr = 'Wireframe Mode'
             self.window.render_mode = ShaderMode.DEFAULT
