@@ -331,18 +331,22 @@ uniform sampler2D mixedAoTex;
 uniform sampler2D specularTex;
 uniform sampler2D roughnessTex;
 uniform sampler2D normalTex;
+uniform sampler2D toonTex;
+uniform sampler2D sphereTex;
 
 uniform bool useBaseColor;
 uniform bool useAO;
 uniform bool useSpecular;
 uniform bool useRoughness;
 uniform bool useNormalMapping;
+uniform bool useToon;
+uniform bool useSphere;
 
 void main()
 {
     vec4 texColor = texture(baseColorTex, newTexCoords);
 
-    if (useBaseColor && texColor.a < 0.02)
+    if (useBaseColor && texColor.a < 0.6)
         discard;
 
     vec3 baseColor = (useBaseColor ? texColor.rgb : newColor.rgb);
@@ -351,6 +355,7 @@ void main()
     vec3 k_d = (useBaseColor ? baseColor : kd);
     float roughness = (useRoughness ? texture(roughnessTex, newTexCoords).x : r);
     float n = 1.0 / (0.003 * roughness + 0.001); // shininess parameter
+    float alpha = useBaseColor ? texColor.a : newColor.a;
 
     vec3 N;
     if (useNormalMapping) {
@@ -370,26 +375,41 @@ void main()
         vec3 lightVector = lights[i].position - newPosition;
         float distance = length(lightVector);
         vec3 L = normalize(lightVector);
-        vec3 R = reflect(-L, N);
+        //vec3 R = reflect(-L, N);
         vec3 H = normalize(L + V);
 
         float attenuation = lights[i].hasAttenuation ? 1 / (1 + 0.001 * distance + 0.00005 * distance * distance) : 1;
         vec3 radiance = lights[i].color * lights[i].intensity;
 
-        diffuse += attenuation * radiance * k_d * max(dot(N, L), 0.0);
+        float ndotl = max(dot(N, L), 0.0);
+        if (useToon) {
+            float stepped = ndotl > 0.55 ? 0.8 : (ndotl > 0.05 ? 0.6 : 0.3);
+            vec3 toonColor = texture(toonTex, vec2(0.5, stepped)).rgb;
+            diffuse += attenuation * radiance * k_d * stepped * toonColor;
+            //vec3 toonColor = texture(toonTex, vec2(0.5, ndotl)).rgb;
+            //diffuse += attenuation * radiance * k_d * ndotl * toonColor;
+        }
+        else {
+            diffuse += attenuation * radiance * k_d * ndotl;
+        }
+
         specular += attenuation * radiance * k_s * pow(max(dot(N, H), 0.0), n);
         ambient += k_a * radiance;
     }
 
-    float alpha;
-    if (!useBaseColor) {
+    if (!useBaseColor)
         color = newColor.rgb * (diffuse + ambient) + specular;
-        alpha = newColor.a;
-    }
-    else {
+    else
         color = diffuse + specular + ambient;
-        alpha = texColor.a;
+
+    vec3 sphereColor = vec3(0.0);
+    if (useSphere) {
+        vec3 R = reflect(-V, N);
+        vec2 sphereUV = R.xy * 0.5 + 0.5;
+        sphereColor = texture(sphereTex, sphereUV).rgb;
+        color += sphereColor * 0.3;
     }
+    
     outColor = vec4(color, alpha);
 }
 """

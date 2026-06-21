@@ -54,6 +54,12 @@ class Material:
             case TextureType.NORMAL_MAP:
                 self.use_normal_map_tex = True
                 self.textures["normalTex"] = texture
+            case TextureType.TOON:
+                self.use_toon_tex = True
+                self.textures["toonTex"] = texture
+            case TextureType.SPHERE:
+                self.use_sphere_tex = True
+                self.textures["sphereTex"] = texture
     
     def set_shader_vars(self, shape):
         shape.shader_program["ka"] = self.ka
@@ -66,6 +72,8 @@ class Material:
         shape.shader_program["useSpecular"] = self.use_specular_tex
         shape.shader_program["useRoughness"] = self.use_roughness_tex
         shape.shader_program["useNormalMapping"] = self.use_normal_map_tex
+        shape.shader_program["useToon"] = self.use_toon_tex
+        shape.shader_program["useSphere"] = self.use_sphere_tex
     
     def reset_textures(self):
         self.textures = {}

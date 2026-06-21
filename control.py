@@ -76,6 +76,10 @@ class Control:
                 self.window.use_roughness_tex = not self.window.use_roughness_tex
             elif symbol == pyglet.window.key.B:
                 self.window.use_normal_mapping = not self.window.use_normal_mapping
+            elif symbol == pyglet.window.key.T:
+                self.window.use_toon = not self.window.use_toon
+            elif symbol == pyglet.window.key.Y:
+                self.window.use_sphere = not self.window.use_sphere
     
     def on_key_release(self, symbol, modifier):
         if symbol == pyglet.window.key.ESCAPE:

@@ -75,6 +75,8 @@ class RenderWindow(pyglet.window.Window):
         self.use_specular_tex = False
         self.use_roughness_tex = False
         self.use_normal_mapping = False
+        self.use_toon = True
+        self.use_sphere = True
         self.modeStr = 'Wireframe Mode'
 
     def setup(self) -> None:
@@ -82,7 +84,7 @@ class RenderWindow(pyglet.window.Window):
         self.set_mouse_visible(True)
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_CULL_FACE)
-        glClearColor(.3, .3, .3, 1)
+        glClearColor(.3, .3, .3, 1.0)
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         #glLineWidth(2.5)
@@ -118,7 +120,15 @@ class RenderWindow(pyglet.window.Window):
         
         modeText = pyglet.text.Label(self.modeStr, font_size=20, x=10, y=10)
         modeText.draw()
-                        
+
+        if self.render_mode == ShaderMode.TEXTURED:
+            toon_on_off = "ON" if self.use_toon else "OFF"
+            toon_modeText = pyglet.text.Label("Toon: " + toon_on_off, font_size=15, x=10, y=80)
+            toon_modeText.draw()
+            sphere_on_off = "ON" if self.use_sphere else "OFF"
+            sphere_modeText = pyglet.text.Label("Sphere: " + sphere_on_off, font_size=15, x=10, y=50)
+            sphere_modeText.draw()
+    
 
     def update(self,dt) -> None:
         view_proj = self.proj_mat @ self.view_mat # type: ignore
@@ -171,7 +181,7 @@ class RenderWindow(pyglet.window.Window):
                 rotate_axis = Vec3(0,1,0)
                 rotate_mat = Mat4.from_rotation(angle = rotate_angle, vector = rotate_axis)
                 
-                shape.transform_mat @= rotate_mat
+                shape.transform_mat = rotate_mat @ shape.transform_mat
 
                 # # Example) You can control the vertices of shape.
                 # shape.indexed_vertices_list.vertices[0] += 0.5 * dt
@@ -191,13 +201,14 @@ class RenderWindow(pyglet.window.Window):
                     shape.shader_program[f"lights[{i}].intensity"] = light["intensity"]
                     shape.shader_program[f"lights[{i}].hasAttenuation"] = light["has_attenuation"]
 
-            # if shape.shader_mode == ShaderMode.TEXTURED:
+            if shape.shader_mode == ShaderMode.TEXTURED:
+                shape.shader_program["useToon"] = self.use_toon and shape.material.use_toon_tex
+                shape.shader_program["useSphere"] = self.use_sphere and shape.material.use_sphere_tex
             #     shape.shader_program["useBaseColor"] = self.use_base_color_tex
             #     shape.shader_program["useAO"] = self.use_AO_tex
             #     shape.shader_program["useSpecular"] = self.use_specular_tex
             #     shape.shader_program["useRoughness"] = self.use_roughness_tex
             #     shape.shader_program["useNormalMapping"] = self.use_normal_mapping
-
 
 
     def on_resize(self, width, height):
