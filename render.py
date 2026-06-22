@@ -231,7 +231,6 @@ class RenderWindow(pyglet.window.Window):
     
     def load_model(self, filename, transform=None, color=None, edge_color=[255, 255, 255, 255], material=None, material_map=None):
         mesh_name = filename.split("/")[-1].split(".")[0]
-        mesh = Mesh(mesh_name)
 
         if transform is None:
             transform = Mat4.from_translation(self.cam_target)
@@ -240,7 +239,7 @@ class RenderWindow(pyglet.window.Window):
             color = [random.randint(40, 250), random.randint(40, 250), random.randint(40, 250), 255]
 
         if material is None:
-            material = Material()        
+            material = Material()
         
         vertex_coords = []
         texture_coords = []
@@ -259,7 +258,6 @@ class RenderWindow(pyglet.window.Window):
                     continue
                 x, y, z = map(float, line.split()[1:4])
                 vertex_coords.append((x, y, z))
-                mesh.vertices.append(Vertex(Vec3(x, y, z), len(mesh.vertices), color))
             elif line.startswith("vt "):
                 u, v = map(float, line.split()[1:3])
                 texture_coords.append((u,v))            
@@ -271,7 +269,6 @@ class RenderWindow(pyglet.window.Window):
                 normal_coords.append((x, y, z))
                 has_vn = True
         
-        edge_halfedges = {}
         vertices = []
         indices = []
         normals = []
@@ -381,71 +378,11 @@ class RenderWindow(pyglet.window.Window):
                             normals[k*3+0] += face_normal.x
                             normals[k*3+1] += face_normal.y
                             normals[k*3+2] += face_normal.z
-                
-                # generate halfedges around the face
-                face = None
-                prev_halfedge = None
-                prev_twin_halfedge = None  
-                for j in range(len(face_obj_indices)):
-                    v_i_start = face_obj_indices[j]
-                    v_i_end = face_obj_indices[(j+1)%len(face_obj_indices)]
-                    v_start = mesh.vertices[v_i_start]
-                    v_end = mesh.vertices[v_i_end]
-                    edge = (v_i_start, v_i_end)
-                    revesed_edge = (v_i_end, v_i_start)
-
-                    # create halfedge and its twin if the edge is not created
-                    if edge not in edge_halfedges:
-                        halfedge = Halfedge(v_start)
-                        twin_halfedge = Halfedge(v_end)
-                        actual_edge = Edge(halfedge)
-
-                        edge_halfedges[edge] = halfedge
-                        edge_halfedges[revesed_edge] = twin_halfedge
-
-                        halfedge.edge = actual_edge
-                        twin_halfedge.edge = actual_edge
-                        halfedge.twin = twin_halfedge
-                        twin_halfedge.twin = halfedge
-
-                        mesh.edges.append(actual_edge)
-                        mesh.halfedges.append(halfedge)
-                        mesh.halfedges.append(twin_halfedge)
-                    else:
-                        halfedge = edge_halfedges[edge]
-                    
-                    if v_start.halfedge is None:
-                        v_start.halfedge = halfedge
-                    if j == 0:
-                        face = Face(halfedge)
-                        mesh.faces.append(face)
-                        start_halfedge = halfedge
-                    if j == len(face_indices) - 1:
-                        halfedge.next = start_halfedge
-                    if prev_halfedge:
-                        prev_halfedge.next = halfedge
-                    if prev_twin_halfedge and halfedge.twin.next is None:
-                        halfedge.twin.next = prev_twin_halfedge
-                    prev_halfedge = halfedge
-                    prev_twin_halfedge = halfedge.twin
-                    halfedge.face = face
         
         if isGrouping:
             self.build_mesh(transform, vertices, indices, normals, tex_coords, tangents, color, edge_color, sub_mat)
         else:
             self.build_mesh(transform, vertices, indices, normals, tex_coords, tangents, color, edge_color, material)
-
-        boundary_halfedges = {}
-        for edge, halfedge in edge_halfedges.items():
-            if halfedge.face is None:
-                boundary_halfedges[edge[1]] = halfedge
-        for v_end, halfedge in boundary_halfedges.items():
-            boundary_halfedges[halfedge.vertex.index].next = halfedge
-
-        self.meshes.append(mesh)
-        mesh.print_info()
-        #for vertex in mesh.vertices:
-            #vertex.print_info()
 
 
     def build_mesh(self, transform, vertices, indices, normals, tex_coords, tangents, color, edge_color, material):
@@ -566,6 +503,19 @@ class RenderWindow(pyglet.window.Window):
             for z in range(int(-depth/2), int(depth/2) + 1, interval):
                 position = transform @ Vec4(x, 0, z, 1)
                 self.add_point_light(Vec3(position.x, position.y, position.z), color, intensity, has_attenuation)
+
+    def add_shape(self, transform, vertice, indice, color):
+        '''
+        Assign a group for each shape
+        '''
+        shape = CustomGroup(transform, len(self.shapes))
+        shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_TRIANGLES,
+                        batch = self.default_batch,
+                        group = shape,
+                        indices = indice,
+                        vertices = ('f', vertice),
+                        colors = ('Bn', color))
+        self.shapes.append(shape)
          
     def run(self):
         pyglet.clock.schedule_interval(self.update, 1/60)

@@ -18,13 +18,13 @@ if __name__ == '__main__':
     # Keyboard/Mouse control. Not implemented yet.
     controller = Control(renderer)
 
-    # free_rock_material = Material(ka=Vec3(0.1, 0.1, 0.1), kd=Vec3(0.5, 0.5, 0.5), ks=Vec3(0.8, 0.8, 0.8), r=6.0)
-    # free_rock_material.add_texture("Free_rock/Free_rock_tex/Free_rock_Base_Color.jpg", TextureType.BASE_COLOR)
-    # free_rock_material.add_texture("Free_rock/Free_rock_tex/Free_rock_Mixed_AO.jpg", TextureType.AO)
-    # free_rock_material.add_texture("Free_rock/Free_rock_tex/Free_rock_Specular.jpg", TextureType.SPECULAR)
-    # free_rock_material.add_texture("Free_rock/Free_rock_tex/Free_rock_Roughness.jpg", TextureType.ROUGHNESS)
-    # free_rock_material.add_texture("Free_rock/Free_rock_tex/Free_rock_Normal_OpenGL.jpg", TextureType.NORMAL_MAP)
-    # renderer.load_model('Free_rock/Free_rock.obj', color=[190, 190, 190, 255], material=free_rock_material)
+    free_rock_material = Material(ka=Vec3(0.1, 0.1, 0.1), kd=Vec3(0.5, 0.5, 0.5), ks=Vec3(0.8, 0.8, 0.8), r=6.0)
+    free_rock_material.add_texture("Free_rock/Free_rock_tex/Free_rock_Base_Color.jpg", TextureType.BASE_COLOR)
+    free_rock_material.add_texture("Free_rock/Free_rock_tex/Free_rock_Mixed_AO.jpg", TextureType.AO)
+    free_rock_material.add_texture("Free_rock/Free_rock_tex/Free_rock_Specular.jpg", TextureType.SPECULAR)
+    free_rock_material.add_texture("Free_rock/Free_rock_tex/Free_rock_Roughness.jpg", TextureType.ROUGHNESS)
+    free_rock_material.add_texture("Free_rock/Free_rock_tex/Free_rock_Normal_OpenGL.jpg", TextureType.NORMAL_MAP)
+    renderer.load_model('Free_rock/Free_rock.obj', color=[190, 190, 190, 255], material=free_rock_material)
 
     gold_color = [255, 215, 0, 255]
     miku_color = [134, 206, 203, 255]
@@ -99,7 +99,7 @@ if __name__ == '__main__':
         "Outline": outline_mat
     }
     miku_material = Material(ka=Vec3(0.1, 0.1, 0.1), kd=Vec3(0.6, 0.6, 0.6), ks=Vec3(0.25, 0.25, 0.25), r=10.0)
-    renderer.load_model('Miku/MikuTest.obj', color=gold_color, transform=Mat4.from_translation(Vec3(0, -20, 0)) @ Mat4.from_scale(Vec3(20, 20, 20)), material=miku_material, material_map=miku_material_map)
+    #renderer.load_model('Miku/MikuTest.obj', color=gold_color, transform=Mat4.from_translation(Vec3(0, -20, 0)) @ Mat4.from_scale(Vec3(20, 20, 20)), material=miku_material, material_map=miku_material_map)
     #renderer.load_model('Miku/miku.obj', color = gold_color, transform = Mat4.from_translation(Vec3(0, -20, 0)) @ Mat4.from_scale(Vec3(20, 20, 3)), material=miku_material, material_map=miku_material_map)
 
     renderer.add_point_light(position=Vec3(100, 80, 100), intensity=1.0, has_attenuation=False)

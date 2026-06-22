@@ -67,7 +67,7 @@ class Cube:
     '''
     default structure of cube
     '''
-    def __init__(self, scale=Vec3(x=1.0, y=1.0, z=1.0)):
+    def __init__(self, scale=Vec3(x=1.0, y=1.0, z=1.0), color=Vec4(255, 255, 255, 255)):
         self.vertices = [-0.5, -0.5, 0.5,
             0.5, -0.5, 0.5,
             0.5, 0.5, 0.5,
@@ -85,21 +85,13 @@ class Cube:
                     5, 6, 2, 2, 1, 5,
                     7, 4, 0, 0, 3, 7]
     
-        self.colors = (255, 0,  0,255,
-                0, 255,  0,255,
-                0,   0,255,255,
-                255,255,255,255,
-                
-                255, 0,  0,255,
-                0, 255,  0,255,
-                0,   0,255,255,
-                255,255,255,255)
+        self.colors = (color[0], color[1], color[2], color[3]) * 8
         
 class Sphere:
     '''
     default structure of sphere
     '''
-    def __init__(self, stacks, slices, scale=1.0):
+    def __init__(self, stacks, slices, scale=1.0, color=Vec4(255, 255, 255, 255)):
         num_triangles = 2 * slices * (stacks - 1)
 
         self.vertices = []
@@ -155,9 +147,9 @@ class Sphere:
                     self.vertices.append(y2)
                     self.vertices.append(z2)
                     
-                    self.colors += (int(math.cos(phi0) * 255),int(math.cos(theta0) * 255),int(math.sin(phi0)*255),255)
-                    self.colors += (int(math.cos(phi0) * 255),int(math.cos(theta0) * 255),int(math.sin(phi0)*255),255)
-                    self.colors += (int(math.cos(phi0) * 255),int(math.cos(theta0) * 255),int(math.sin(phi0)*255),255)
+                    self.colors += (color[0], color[1], color[2], color[3])
+                    self.colors += (color[0], color[1], color[2], color[3])
+                    self.colors += (color[0], color[1], color[2], color[3])
                 
                 if (i != 0):
                     self.vertices.append(x2)
@@ -172,9 +164,9 @@ class Sphere:
                     self.vertices.append(y0)
                     self.vertices.append(z0)
                     
-                    self.colors += (int(math.cos(phi0) * 255),int(math.cos(theta0) * 255),int(math.sin(phi0)*255),255)
-                    self.colors += (int(math.cos(phi0) * 255),int(math.cos(theta0) * 255),int(math.sin(phi0)*255),255)
-                    self.colors += (int(math.cos(phi0) * 255),int(math.cos(theta0) * 255),int(math.sin(phi0)*255),255)
+                    self.colors += (color[0], color[1], color[2], color[3])
+                    self.colors += (color[0], color[1], color[2], color[3])
+                    self.colors += (color[0], color[1], color[2], color[3])
 
         for i in range(num_triangles*3):
             self.indices.append(i)
