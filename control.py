@@ -45,9 +45,12 @@ class Control:
             self.window.move_down = True
         elif symbol == pyglet.window.key.R:
             self.window.reset_camera()
+        elif symbol == pyglet.window.key._0:
+            self.window.modeStr = 'Default Mode'
+            self.window.render_mode = ShaderMode.DEFAULT
         elif symbol == pyglet.window.key._1:
             self.window.modeStr = 'Wireframe Mode'
-            self.window.render_mode = ShaderMode.DEFAULT
+            self.window.render_mode = ShaderMode.WIREFRAME
         elif symbol == pyglet.window.key._2:
             self.window.modeStr = 'Gouraud Illumination Mode'
             self.window.render_mode = ShaderMode.GOURAUD

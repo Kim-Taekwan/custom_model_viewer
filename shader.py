@@ -2,7 +2,8 @@ from pyglet.graphics.shader import Shader, ShaderProgram
 from enum import Enum
 
 class ShaderMode(Enum):
-    DEFAULT = 1
+    DEFAULT = 0
+    WIREFRAME = 1
     GOURAUD = 2
     PHONG = 3
     BLINN_PHONG = 4

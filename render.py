@@ -12,8 +12,7 @@ import random
 import os
 
 import shader
-from primitives import CustomGroup
-from halfedge import Mesh, Halfedge, Vertex, Edge, Face
+from primitives import CustomGroup, Primitive
 from shader import ShaderMode
 from material import Material, TextureType
 
@@ -67,7 +66,7 @@ class RenderWindow(pyglet.window.Window):
         self.cam_rotate_speed = 0.01
         self.spin_light = False
 
-        self.render_mode = ShaderMode.DEFAULT
+        self.render_mode = ShaderMode.WIREFRAME
         self.meshes = []
         self.lights = []
         self.use_base_color_tex = False
@@ -79,6 +78,9 @@ class RenderWindow(pyglet.window.Window):
         self.use_sphere = True
         self.modeStr = 'Wireframe Mode'
 
+        self.wireframe_color = [255, 255, 255, 255]
+        self.edge_color = [0, 0, 0, 255]
+
     def setup(self) -> None:
         self.set_minimum_size(width = 400, height = 300)
         self.set_mouse_visible(True)
@@ -87,7 +89,7 @@ class RenderWindow(pyglet.window.Window):
         glClearColor(.3, .3, .3, 1.0)
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-        #glLineWidth(2.5)
+        glLineWidth(2.0)
 
         # 1. Create a view matrix
         self.view_mat = Mat4.look_at(
@@ -108,6 +110,8 @@ class RenderWindow(pyglet.window.Window):
         self.clear()
         match self.render_mode:
             case ShaderMode.DEFAULT:
+                self.default_batch.draw()
+            case ShaderMode.WIREFRAME:
                 self.wireframe_batch.draw()
             case ShaderMode.PHONG:
                 self.phong_batch.draw()
@@ -229,7 +233,7 @@ class RenderWindow(pyglet.window.Window):
         screenshot.save(f"Screenshots/{filename}.png")
         print(f"Screenshot Saved")
     
-    def load_model(self, filename, transform=None, color=None, edge_color=[255, 255, 255, 255], material=None, material_map=None):
+    def load_model(self, filename, transform=None, color=None, material=None, material_map=None):
         mesh_name = filename.split("/")[-1].split(".")[0]
 
         if transform is None:
@@ -380,12 +384,12 @@ class RenderWindow(pyglet.window.Window):
                             normals[k*3+2] += face_normal.z
         
         if isGrouping:
-            self.build_mesh(transform, vertices, indices, normals, tex_coords, tangents, color, edge_color, sub_mat)
+            self.build_mesh(transform, vertices, indices, normals, tex_coords, tangents, color, sub_mat)
         else:
-            self.build_mesh(transform, vertices, indices, normals, tex_coords, tangents, color, edge_color, material)
+            self.build_mesh(transform, vertices, indices, normals, tex_coords, tangents, color, material)
 
 
-    def build_mesh(self, transform, vertices, indices, normals, tex_coords, tangents, color, edge_color, material):
+    def build_mesh(self, transform, vertices, indices, normals, tex_coords, tangents, color, material):
         if len(vertices) == 0:
             return
 
@@ -412,14 +416,13 @@ class RenderWindow(pyglet.window.Window):
                     wire_indices.extend([a, b])
 
         face_colors = color * (len(vertices) // 3)
-        edge_colors = edge_color * (len(vertices) // 3)
 
         self.add_faces(transform, vertices, indices, face_colors, normals)
-        self.add_wireframes(transform, vertices, wire_indices, edge_colors, normals)
+        self.add_edges(transform, vertices, wire_indices)
         self.add_faces_with_material(transform, vertices, indices, face_colors, normals, tex_coords, tangents, material)
 
 
-    def add_faces(self, transform, vertice, indice, color, normal, material=None):
+    def add_faces(self, transform, vertice, indice, color, normal):
         '''
         Assign a group for each shape
         '''
@@ -478,15 +481,25 @@ class RenderWindow(pyglet.window.Window):
         shape.material = material
         self.shapes.append(shape)
 
-    def add_wireframes(self, transform, vertice, indices, color, normal):
-        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.DEFAULT)
+    def add_edges(self, transform, vertice, indices):
+        wireframe_colors = self.wireframe_color * (len(vertice) // 3)
+        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.WIREFRAME)
         shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_LINES, # type: ignore
             batch=self.wireframe_batch,
             group=shape,
             indices=indices,
             vertices=('f', vertice),
-            colors=('Bn', color),
-            normals = ('f', normal))
+            colors=('Bn', wireframe_colors))
+        self.shapes.append(shape)
+
+        edge_colors = self.edge_color * (len(vertice) // 3)
+        shape = CustomGroup(transform, len(self.shapes), shader_mode=ShaderMode.DEFAULT)
+        shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_LINES, # type: ignore
+            batch=self.default_batch,
+            group=shape,
+            indices=indices,
+            vertices=('f', vertice),
+            colors=('Bn', edge_colors))
         self.shapes.append(shape)
 
     def add_point_light(self, position, color=Vec3(1.0, 1.0, 1.0), intensity=1.0, has_attenuation=True):
@@ -504,18 +517,27 @@ class RenderWindow(pyglet.window.Window):
                 position = transform @ Vec4(x, 0, z, 1)
                 self.add_point_light(Vec3(position.x, position.y, position.z), color, intensity, has_attenuation)
 
-    def add_shape(self, transform, vertice, indice, color):
-        '''
-        Assign a group for each shape
-        '''
-        shape = CustomGroup(transform, len(self.shapes))
-        shape.indexed_vertices_list = shape.shader_program.vertex_list_indexed(len(vertice)//3, GL_TRIANGLES,
-                        batch = self.default_batch,
-                        group = shape,
-                        indices = indice,
-                        vertices = ('f', vertice),
-                        colors = ('Bn', color))
-        self.shapes.append(shape)
+    def add_primitive(self, transform, primitive:Primitive, material=None):
+        if material is None:
+            material = Material()
+
+        num = len(primitive.vertices) // 3
+        texture_coords = [0, 0] * num
+        tangents = [0, 0, 0] * num
+
+        wire_indices = []
+        wire_set = set()
+        for j in range(0, len(primitive.indices), 3):
+            p0, p1, p2 = primitive.indices[j], primitive.indices[j+1], primitive.indices[j+2]
+            for a, b in [(p0, p1), (p1, p2), (p2, p0)]:
+                e = tuple(sorted((a, b)))
+                if e not in wire_set:
+                    wire_set.add(e)
+                    wire_indices.extend([a, b])
+
+        self.add_faces(transform, primitive.vertices, primitive.indices, primitive.colors, primitive.normals)
+        self.add_edges(transform, primitive.vertices, wire_indices)
+        self.add_faces_with_material(transform, primitive.vertices, primitive.indices, primitive.colors, primitive.normals, texture_coords, tangents, material)
          
     def run(self):
         pyglet.clock.schedule_interval(self.update, 1/60)
