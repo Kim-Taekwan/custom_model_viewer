@@ -8,6 +8,7 @@ class ShaderMode(Enum):
     PHONG = 3
     BLINN_PHONG = 4
     TEXTURED = 5
+    TOON_EDGE = 6
 
 # create vertex and fragment shader sources
 vertex_source_default = """
@@ -342,15 +343,17 @@ uniform bool useRoughness;
 uniform bool useNormalMapping;
 uniform bool useToon;
 uniform bool useSphere;
+uniform bool useGamma;
 
 void main()
 {
     vec4 texColor = texture(baseColorTex, newTexCoords);
-
     if (useBaseColor && texColor.a < 0.6)
         discard;
 
-    vec3 baseColor = (useBaseColor ? texColor.rgb : newColor.rgb);
+    float gamma = 1.0;
+    if (useGamma) gamma = 2.2;
+    vec3 baseColor = (useBaseColor ? pow(texColor.rgb, vec3(gamma)) : newColor.rgb);
     vec3 k_a = (useAO ? texture(mixedAoTex, newTexCoords).rgb * baseColor : ka);
     vec3 k_s = (useSpecular ? texture(specularTex, newTexCoords).rgb : ks);
     vec3 k_d = (useBaseColor ? baseColor : kd);
@@ -384,11 +387,12 @@ void main()
 
         float ndotl = max(dot(N, L), 0.0);
         if (useToon) {
-            float stepped = ndotl > 0.55 ? 0.8 : (ndotl > 0.05 ? 0.6 : 0.3);
-            vec3 toonColor = texture(toonTex, vec2(0.5, stepped)).rgb;
-            diffuse += attenuation * radiance * k_d * stepped * toonColor;
-            //vec3 toonColor = texture(toonTex, vec2(0.5, ndotl)).rgb;
-            //diffuse += attenuation * radiance * k_d * ndotl * toonColor;
+            //float stepped = ndotl > 0.55 ? 0.8 : (ndotl > 0.05 ? 0.6 : 0.3);
+            //vec3 toonColor = texture(toonTex, vec2(0.5, stepped)).rgb;
+            //diffuse += attenuation * radiance * k_d * stepped * toonColor;
+
+            vec3 toonColor = texture(toonTex, vec2(0.5, ndotl)).rgb * 0.9;
+            diffuse += attenuation * radiance * k_d * toonColor;
         }
         else {
             diffuse += attenuation * radiance * k_d * ndotl;
@@ -398,8 +402,10 @@ void main()
         ambient += k_a * radiance;
     }
 
-    if (!useBaseColor)
+    if (!useBaseColor) {
         color = newColor.rgb * (diffuse + ambient) + specular;
+        color = pow(color, vec3(1/gamma));
+    }
     else
         color = diffuse + specular + ambient;
 
@@ -408,10 +414,38 @@ void main()
         vec3 R = reflect(-V, N);
         vec2 sphereUV = R.xy * 0.5 + 0.5;
         sphereColor = texture(sphereTex, sphereUV).rgb;
-        color += sphereColor * 0.3;
+        color += sphereColor * 0.2;
     }
     
     outColor = vec4(color, alpha);
+}
+"""
+
+
+vertex_source_edge = """
+#version 330
+layout(location = 0) in vec3 vertices;
+layout(location = 2) in vec3 normals;
+
+uniform mat4 view_proj;
+uniform mat4 model;
+uniform float edgeWidth;
+
+void main()
+{
+    vec3 expanded = vertices + normals * edgeWidth;
+    gl_Position = view_proj * model * vec4(expanded, 1.0);
+}
+"""
+
+fragment_source_edge = """
+#version 330
+out vec4 outColor;
+uniform vec4 edgeColor;
+
+void main()
+{
+    outColor = edgeColor;
 }
 """
 

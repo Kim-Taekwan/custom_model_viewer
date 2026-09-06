@@ -2,6 +2,7 @@ import pyglet
 from pyglet.gl import *
 from enum import Enum
 from pyglet.math import Vec3
+import os
 
 class TextureType(Enum):
     BASE_COLOR = 1
@@ -13,7 +14,7 @@ class TextureType(Enum):
     SPHERE = 7
 
 class Material:
-    def __init__(self, ka=Vec3(0.1, 0.1, 0.1), kd=Vec3(0.5, 0.5, 0.5), ks=Vec3(0.8, 0.8, 0.8), r=6.0):
+    def __init__(self, ka=Vec3(0.1, 0.1, 0.1), kd=Vec3(1.0, 1.0, 1.0), ks=Vec3(0.0, 0.0, 0.0), r=10.0):
         self.ka = ka
         self.ks = ks
         self.kd = kd
@@ -27,9 +28,15 @@ class Material:
         self.use_normal_map_tex = False
         self.use_toon_tex = False
         self.use_sphere_tex = False
+        self.use_gamma_correction = False
+        self.use_toon_edge = False
+        self.toon_edge_color = None
+        self.toon_edge_size = None
+
     
-    def add_texture(self, filename: str,  texture_type: TextureType):
-        texture = pyglet.image.load(filename).get_texture()
+    def add_texture(self, filename: str,  texture_type: TextureType, path=''):
+        file_path = os.path.join(path, filename)
+        texture = pyglet.image.load(file_path).get_texture()
 
         glBindTexture(GL_TEXTURE_2D, texture.id)
         glGenerateMipmap(GL_TEXTURE_2D)
@@ -56,10 +63,15 @@ class Material:
                 self.textures["normalTex"] = texture
             case TextureType.TOON:
                 self.use_toon_tex = True
-                self.textures["toonTex"] = texture
+                self.textures["toonTex"] = texture                    
             case TextureType.SPHERE:
                 self.use_sphere_tex = True
                 self.textures["sphereTex"] = texture
+
+    def enable_toon_edge(self, toon_edge_color=None, toon_edge_size=None):
+        self.use_toon_edge = True
+        self.toon_edge_color = toon_edge_color
+        self.toon_edge_size = toon_edge_size
     
     def set_shader_vars(self, shape):
         shape.shader_program["ka"] = self.ka
@@ -74,6 +86,7 @@ class Material:
         shape.shader_program["useNormalMapping"] = self.use_normal_map_tex
         shape.shader_program["useToon"] = self.use_toon_tex
         shape.shader_program["useSphere"] = self.use_sphere_tex
+        shape.shader_program["useGamma"] = self.use_gamma_correction
     
     def reset_textures(self):
         self.textures = {}

@@ -49,8 +49,8 @@ class Control:
             self.window.modeStr = 'Default Mode'
             self.window.render_mode = ShaderMode.DEFAULT
         elif symbol == pyglet.window.key._1:
-            self.window.modeStr = 'Wireframe Mode'
-            self.window.render_mode = ShaderMode.WIREFRAME
+            self.window.modeStr = 'Texture Mode'
+            self.window.render_mode = ShaderMode.TEXTURED
         elif symbol == pyglet.window.key._2:
             self.window.modeStr = 'Gouraud Illumination Mode'
             self.window.render_mode = ShaderMode.GOURAUD
@@ -61,11 +61,11 @@ class Control:
             self.window.modeStr = 'Blinn-Phong Illumination Mode'
             self.window.render_mode = ShaderMode.BLINN_PHONG
         elif symbol == pyglet.window.key._5:
-            self.window.modeStr = 'Texture Mode'
-            self.window.render_mode = ShaderMode.TEXTURED
+            self.window.modeStr = 'Wireframe Mode'
+            self.window.render_mode = ShaderMode.WIREFRAME
         elif symbol in [pyglet.window.key.LSHIFT, pyglet.window.key.RSHIFT]:
             self.window.cam_speed = self.window.cam_dash_speed
-        elif symbol == pyglet.window.key.P:
+        elif symbol == pyglet.window.key.F12:
             self.window.save_screenshot()
 
         if self.window.render_mode == ShaderMode.TEXTURED:
@@ -82,7 +82,7 @@ class Control:
             elif symbol == pyglet.window.key.T:
                 self.window.use_toon = not self.window.use_toon
             elif symbol == pyglet.window.key.Y:
-                self.window.use_sphere = not self.window.use_sphere
+                self.window.use_toon_edge = not self.window.use_toon_edge
     
     def on_key_release(self, symbol, modifier):
         if symbol == pyglet.window.key.ESCAPE:
