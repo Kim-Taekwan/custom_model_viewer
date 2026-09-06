@@ -69,15 +69,15 @@ class Control:
             self.window.save_screenshot()
 
         if self.window.render_mode == ShaderMode.TEXTURED:
-            if symbol == pyglet.window.key.Z:
-                self.window.use_base_color_tex = not self.window.use_base_color_tex
-            elif symbol == pyglet.window.key.X:
+            # if symbol == pyglet.window.key.Z:
+            #     self.window.use_base_color_tex = not self.window.use_base_color_tex
+            # elif symbol == pyglet.window.key.C:
+            #     self.window.use_specular_tex = not self.window.use_specular_tex
+            # elif symbol == pyglet.window.key.V:
+            #     self.window.use_roughness_tex = not self.window.use_roughness_tex
+            if symbol == pyglet.window.key.O:
                 self.window.use_AO_tex = not self.window.use_AO_tex
-            elif symbol == pyglet.window.key.C:
-                self.window.use_specular_tex = not self.window.use_specular_tex
-            elif symbol == pyglet.window.key.V:
-                self.window.use_roughness_tex = not self.window.use_roughness_tex
-            elif symbol == pyglet.window.key.B:
+            elif symbol == pyglet.window.key.N:
                 self.window.use_normal_mapping = not self.window.use_normal_mapping
             elif symbol == pyglet.window.key.T:
                 self.window.use_toon = not self.window.use_toon

@@ -6,6 +6,8 @@ from control import Control
 from material import Material, TextureType
 
 def render_genoge_miku():
+    renderer.has_toon = True
+
     #gold_color = [255, 215, 0, 255]
     miku_color = [134, 206, 203, 255]
     skin_mat = Material(kd=Vec3(0.95, 0.95, 0.95), ks=Vec3(0.03, 0.03, 0.03))
@@ -121,6 +123,8 @@ def render_genoge_miku():
     #renderer.load_model('Miku/Genoge/miku.obj', color = miku_color, transform = Mat4.from_translation(Vec3(0, -20, 0)) @ Mat4.from_scale(Vec3(20, 20, 20)), material=miku_material, material_map=miku_material_map)
 
 def render_sour_miku():
+    renderer.has_toon = True
+
     miku_color = [134, 206, 203, 255]
     face_mat = Material(kd=Vec3(0.95, 0.95, 0.95), ks=Vec3(0.03, 0.03, 0.03))
     body_mat = Material(kd=Vec3(0.95, 0.95, 0.95), ks=Vec3(0.03, 0.03, 0.03))
@@ -239,6 +243,9 @@ def render_sour_miku():
     renderer.load_model('Miku/Sour/Sour.obj', color=miku_color, transform=Mat4.from_translation(Vec3(0, -20, 0)) @ Mat4.from_scale(Vec3(20, 20, 20)), material=miku_material, material_map=sour_miku_material_map)
 
 def render_rock():
+    renderer.has_AO = True
+    renderer.has_normal_mapping = True
+
     tex_path = 'Free_rock/Free_rock_tex'
     free_rock_material = Material(ka=Vec3(0.1, 0.1, 0.1), kd=Vec3(0.5, 0.5, 0.5), ks=Vec3(0.8, 0.8, 0.8), r=6.0)
     free_rock_material.add_texture("Free_rock_Base_Color.jpg", TextureType.BASE_COLOR, tex_path)

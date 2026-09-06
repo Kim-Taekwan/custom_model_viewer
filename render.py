@@ -68,14 +68,18 @@ class RenderWindow(pyglet.window.Window):
         self.render_mode = ShaderMode.TEXTURED
         self.meshes = []
         self.lights = []
-        self.use_base_color_tex = False
-        self.use_AO_tex = False
-        self.use_specular_tex = False
-        self.use_roughness_tex = False
-        self.use_normal_mapping = False
+        self.use_base_color_tex = True
+        self.use_specular_tex = True
+        self.use_roughness_tex = True
+        self.use_sphere = True
+        self.use_AO_tex = True
+        self.use_normal_mapping = True
         self.use_toon = True
         self.use_toon_edge = True
-        self.use_sphere = True        
+
+        self.has_AO = False
+        self.has_normal_mapping = False
+        self.has_toon = False
         self.modeStr = 'Texture Mode'
 
         self.wireframe_color = [255, 255, 255, 255]
@@ -86,7 +90,7 @@ class RenderWindow(pyglet.window.Window):
         self.set_mouse_visible(True)
         glEnable(GL_DEPTH_TEST)
         glEnable(GL_CULL_FACE)
-        glClearColor(0.4, 0.4, 0.4, 1.0)
+        glClearColor(0.3, 0.3, 0.3, 1.0)
         glEnable(GL_BLEND)
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
         glLineWidth(2.0)
@@ -132,13 +136,22 @@ class RenderWindow(pyglet.window.Window):
         modeText.draw()
 
         if self.render_mode == ShaderMode.TEXTURED:
-            toon_on_off = "ON" if self.use_toon else "OFF"
-            toon_modeText = pyglet.text.Label("Toon: " + toon_on_off, font_size=15, x=10, y=50)
-            toon_modeText.draw()
-        #     sphere_on_off = "ON" if self.use_sphere else "OFF"
-        #     sphere_modeText = pyglet.text.Label("Sphere: " + sphere_on_off, font_size=15, x=10, y=80)
-        #     sphere_modeText.draw()
-    
+            y_offset = 50
+            if self.has_normal_mapping:
+                normal_on_off = "ON" if self.use_normal_mapping else "OFF"
+                normal_modeText = pyglet.text.Label("Normal Mapping(N): " + normal_on_off, font_size=15, x=10, y=y_offset)
+                normal_modeText.draw()
+                y_offset += 30
+            if self.has_AO:
+                ao_on_off = "ON" if self.use_AO_tex else "OFF"
+                ao_modeText = pyglet.text.Label("AO(O): " + ao_on_off, font_size=15, x=10, y=y_offset)
+                ao_modeText.draw()
+                y_offset += 30
+            if self.has_toon:
+                toon_on_off = "ON" if self.use_toon else "OFF"
+                toon_modeText = pyglet.text.Label("Toon(T): " + toon_on_off, font_size=15, x=10, y=y_offset)
+                toon_modeText.draw()
+                y_offset += 30  
 
     def update(self,dt) -> None:
         view_proj = self.proj_mat @ self.view_mat # type: ignore
@@ -213,12 +226,8 @@ class RenderWindow(pyglet.window.Window):
 
             if shape.shader_mode == ShaderMode.TEXTURED:
                 shape.shader_program["useToon"] = self.use_toon and shape.material.use_toon_tex
-                shape.shader_program["useSphere"] = self.use_sphere and shape.material.use_sphere_tex
-                # shape.shader_program["useBaseColor"] = self.use_base_color_tex
-                # shape.shader_program["useAO"] = self.use_AO_tex
-                # shape.shader_program["useSpecular"] = self.use_specular_tex
-                # shape.shader_program["useRoughness"] = self.use_roughness_tex
-                # shape.shader_program["useNormalMapping"] = self.use_normal_mapping
+                shape.shader_program["useAO"] = self.use_AO_tex and shape.material.use_AO_tex
+                shape.shader_program["useNormalMapping"] = self.use_normal_mapping and shape.material.use_normal_map_tex
 
 
     def on_resize(self, width, height):
