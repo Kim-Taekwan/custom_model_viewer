@@ -254,24 +254,25 @@ if __name__ == '__main__':
     width = 1280
     height = 720
 
-    print("1 - Free Rock")
+    print("1 - Rock")
     print("2 - Genoge Miku")
     print("3 - Sour Miku")
     while True:
         n = int(input("Select a model # to render: "))
+
         if n not in [1, 2, 3]:
             print("Invalid input.")
         else:
             break
 
     # Render window.
-    renderer = RenderWindow(width, height, "Local Illumination Model", resizable = True)
+    renderer = RenderWindow(width, height, "Custom Model Viewer", resizable = True)
     renderer.set_location(200, 200)
     controller = Control(renderer)
 
     match n:
         case 1:
-            print("Rendering Free Rock...")
+            print("Rendering Rock...")
             render_rock()
         case 2:
             print("Rendering Genoge Miku...")
@@ -279,7 +280,6 @@ if __name__ == '__main__':
         case 3:
             print("Rendering Sour Miku...")
             render_sour_miku()
-    #renderer.load_model('model/test.obj')
 
     renderer.add_point_light(position=Vec3(100, 80, 100), intensity=1.0, has_attenuation=False)
     #renderer.add_point_light(position=Vec3(30, 30, 30), intensity=0.8)

@@ -131,12 +131,12 @@ class RenderWindow(pyglet.window.Window):
         modeText = pyglet.text.Label(self.modeStr, font_size=20, x=10, y=10)
         modeText.draw()
 
-        # if self.render_mode == ShaderMode.TEXTURED:
-        #     toon_on_off = "ON" if self.use_toon else "OFF"
-        #     toon_modeText = pyglet.text.Label("Toon: " + toon_on_off, font_size=15, x=10, y=80)
-        #     toon_modeText.draw()
+        if self.render_mode == ShaderMode.TEXTURED:
+            toon_on_off = "ON" if self.use_toon else "OFF"
+            toon_modeText = pyglet.text.Label("Toon: " + toon_on_off, font_size=15, x=10, y=50)
+            toon_modeText.draw()
         #     sphere_on_off = "ON" if self.use_sphere else "OFF"
-        #     sphere_modeText = pyglet.text.Label("Sphere: " + sphere_on_off, font_size=15, x=10, y=50)
+        #     sphere_modeText = pyglet.text.Label("Sphere: " + sphere_on_off, font_size=15, x=10, y=80)
         #     sphere_modeText.draw()
     
 
